@@ -8,7 +8,7 @@ export default function EmptyState({ message, icon }: EmptyStateProps) {
     <div className="text-center py-12">
       {icon || (
         <svg
-          className="mx-auto h-12 w-12 text-gray-400 mb-4"
+          className="mx-auto h-12 w-12 text-slate-400 mb-4"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -21,7 +21,7 @@ export default function EmptyState({ message, icon }: EmptyStateProps) {
           />
         </svg>
       )}
-      <p className="text-gray-500">{message}</p>
+      <p className="text-slate-400">{message}</p>
     </div>
   )
 }

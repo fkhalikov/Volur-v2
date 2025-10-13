@@ -55,26 +55,26 @@ export default function SymbolsPage() {
   return (
     <div>
       {/* Breadcrumb */}
-      <nav className="mb-4 text-sm text-gray-500">
-        <Link to="/exchanges" className="hover:text-blue-600">
+      <nav className="mb-4 text-sm text-slate-400">
+        <Link to="/exchanges" className="hover:text-blue-400">
           Exchanges
         </Link>
         <span className="mx-2">/</span>
-        <span className="text-gray-900">{data?.exchange.name}</span>
+        <span className="text-white">{data?.exchange.name}</span>
       </nav>
 
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+        <h1 className="text-3xl font-bold text-white mb-2">
           {data?.exchange.name}
         </h1>
-        <p className="text-gray-600">
+        <p className="text-slate-300">
           {data?.exchange.country} • {data?.exchange.currency}
         </p>
       </div>
 
       {/* Cache info and pagination summary */}
-      <div className="mb-4 flex justify-between items-center text-sm text-gray-500">
+      <div className="mb-4 flex justify-between items-center text-sm text-slate-400">
         <div>
           {data?.cache && (
             <span>
@@ -100,67 +100,67 @@ export default function SymbolsPage() {
           placeholder="Search symbols by ticker or name..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
       </div>
 
       {/* Table */}
       {data?.items && data.items.length > 0 ? (
         <>
-          <div className="bg-white shadow rounded-lg overflow-hidden mb-6">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="bg-slate-800 shadow-lg rounded-lg overflow-hidden mb-6 border border-slate-700">
+            <table className="min-w-full divide-y divide-slate-700">
+              <thead className="bg-slate-700">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                     Ticker
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                     Name
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                     Type
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                     Currency
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                     ISIN
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                     Status
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-slate-800 divide-y divide-slate-700">
                 {data.items.map((symbol) => (
-                  <tr key={symbol.ticker} className="hover:bg-gray-50">
+                  <tr key={symbol.ticker} className="hover:bg-slate-700">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
                         onClick={() => handleCopyTicker(symbol.ticker)}
-                        className="text-sm font-medium text-blue-600 hover:text-blue-900 cursor-pointer"
+                        className="text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer"
                         title="Click to copy"
                       >
                         {symbol.ticker}
                       </button>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">{symbol.name}</div>
+                      <div className="text-sm text-white">{symbol.name}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">{symbol.type || '-'}</div>
+                      <div className="text-sm text-slate-300">{symbol.type || '-'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">{symbol.currency || '-'}</div>
+                      <div className="text-sm text-slate-300">{symbol.currency || '-'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500 font-mono">{symbol.isin || '-'}</div>
+                      <div className="text-sm text-slate-300 font-mono">{symbol.isin || '-'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                           symbol.isActive
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
+                            ? 'bg-green-600 text-white'
+                            : 'bg-slate-600 text-slate-300'
                         }`}
                       >
                         {symbol.isActive ? 'Active' : 'Inactive'}
@@ -178,17 +178,17 @@ export default function SymbolsPage() {
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 border border-slate-600 rounded-md text-sm font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous
               </button>
-              <span className="text-sm text-gray-700">
+              <span className="text-sm text-slate-300">
                 Page {page} of {Math.ceil(data.pagination.total / data.pagination.pageSize)}
               </span>
               <button
                 onClick={() => setPage((p) => p + 1)}
                 disabled={!data.pagination.hasNext}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 border border-slate-600 rounded-md text-sm font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
               </button>
