@@ -5,6 +5,9 @@ using Volur.Application.Configuration;
 using Volur.Application.UseCases.GetExchanges;
 using Volur.Application.UseCases.GetSymbols;
 using Volur.Application.UseCases.RefreshSymbols;
+using Volur.Application.UseCases.GetStockQuote;
+using Volur.Application.UseCases.GetStockFundamentals;
+using Volur.Application.UseCases.GetHistoricalPrices;
 
 namespace Volur.Application;
 
@@ -22,6 +25,9 @@ public static class DependencyInjection
         services.AddScoped<GetExchangesHandler>();
         services.AddScoped<GetSymbolsHandler>();
         services.AddScoped<RefreshSymbolsHandler>();
+        services.AddScoped<GetStockQuoteHandler>();
+        services.AddScoped<GetStockFundamentalsHandler>();
+        services.AddScoped<GetHistoricalPricesHandler>();
 
         // Validators
         services.AddValidatorsFromAssemblyContaining<GetSymbolsQuery>();

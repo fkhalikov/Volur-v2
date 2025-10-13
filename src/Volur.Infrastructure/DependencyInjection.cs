@@ -27,6 +27,9 @@ public static class DependencyInjection
         services.AddScoped<IExchangeRepository, ExchangeRepository>();
         services.AddScoped<ISymbolRepository, SymbolRepository>();
 
+        // Stock Data Provider
+        services.AddScoped<IStockDataProvider, YahooFinanceProvider>();
+
         // EODHD HTTP Client
         var eodhdOptions = configuration.GetSection(EodhdOptions.SectionName).Get<EodhdOptions>();
         services.AddHttpClient<IEodhdClient, EodhdClient>(client =>
