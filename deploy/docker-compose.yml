@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: volur-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: volur
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - volur-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/volur --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../
+      dockerfile: deploy/Dockerfile.api
+    container_name: volur-api
+    ports:
+      - "5000:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Mongo__ConnectionString: mongodb://mongodb:27017
+      Mongo__Database: volur
+      Eodhd__ApiToken: ${EODHD_API_TOKEN}
+      Eodhd__BaseUrl: https://eodhd.com/
+      Eodhd__TimeoutSeconds: 10
+      CacheTtl__ExchangesHours: 24
+      CacheTtl__SymbolsHours: 24
+      Cors__AllowedOrigins__0: http://localhost:3000
+      Cors__AllowedOrigins__1: http://localhost:5173
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - volur-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  web:
+    build:
+      context: ../web/volur-web
+      dockerfile: ../../deploy/Dockerfile.web
+    container_name: volur-web
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    networks:
+      - volur-network
+    environment:
+      - VITE_API_URL=http://localhost:5000
+
+networks:
+  volur-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+

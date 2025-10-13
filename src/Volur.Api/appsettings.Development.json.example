@@ -1,0 +1,15 @@
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Debug"
+    }
+  },
+  "Eodhd": {
+    "ApiToken": "YOUR_EODHD_API_TOKEN_HERE"
+  },
+  "Mongo": {
+    "ConnectionString": "mongodb://localhost:27017",
+    "Database": "volur_dev"
+  }
+}
+
