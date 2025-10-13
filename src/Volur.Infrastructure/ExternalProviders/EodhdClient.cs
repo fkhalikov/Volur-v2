@@ -30,7 +30,7 @@ public sealed class EodhdClient : IEodhdClient
         var endpoint = "api/exchanges-list/";
         var url = BuildUrl(endpoint);
 
-        return await ExecuteRequestAsync<List<EodhdExchangeDto>>(url, endpoint, cancellationToken);
+        return await ExecuteRequestAsync<EodhdExchangeDto>(url, endpoint, cancellationToken);
     }
 
     public async Task<Result<IReadOnlyList<EodhdSymbolDto>>> GetSymbolsAsync(string exchangeCode, CancellationToken cancellationToken = default)
@@ -38,7 +38,7 @@ public sealed class EodhdClient : IEodhdClient
         var endpoint = $"api/exchange-symbol-list/{Uri.EscapeDataString(exchangeCode)}";
         var url = BuildUrl(endpoint);
 
-        return await ExecuteRequestAsync<List<EodhdSymbolDto>>(url, endpoint, cancellationToken);
+        return await ExecuteRequestAsync<EodhdSymbolDto>(url, endpoint, cancellationToken);
     }
 
     private string BuildUrl(string endpoint)
@@ -46,7 +46,7 @@ public sealed class EodhdClient : IEodhdClient
         return $"{endpoint}?api_token={_options.ApiToken}&fmt=json";
     }
 
-    private async Task<Result<IReadOnlyList<T>>> ExecuteRequestAsync<T>(string url, string endpoint, CancellationToken cancellationToken) where T : class, IReadOnlyList<object>
+    private async Task<Result<IReadOnlyList<T>>> ExecuteRequestAsync<T>(string url, string endpoint, CancellationToken cancellationToken) where T : class
     {
         var startTime = DateTime.UtcNow;
 
@@ -74,7 +74,7 @@ public sealed class EodhdClient : IEodhdClient
             }
 
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
-            var data = JsonSerializer.Deserialize<T>(content, new JsonSerializerOptions
+            var data = JsonSerializer.Deserialize<List<T>>(content, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
