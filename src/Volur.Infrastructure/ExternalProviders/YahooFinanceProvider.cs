@@ -12,61 +12,112 @@ namespace Volur.Infrastructure.ExternalProviders;
 public sealed class YahooFinanceProvider : IStockDataProvider
 {
     private readonly ILogger<YahooFinanceProvider> _logger;
+    private static readonly SemaphoreSlim _rateLimitSemaphore = new(1, 1);
+    private static DateTime _lastRequestTime = DateTime.MinValue;
+    private const int MinDelayBetweenRequestsMs = 2000; // 2 seconds between requests
 
     public YahooFinanceProvider(ILogger<YahooFinanceProvider> logger)
     {
         _logger = logger;
     }
 
-    public async Task<Result<StockQuoteDto>> GetQuoteAsync(string ticker, CancellationToken cancellationToken = default)
+    private async Task RateLimitAsync(CancellationToken cancellationToken)
     {
+        await _rateLimitSemaphore.WaitAsync(cancellationToken);
         try
         {
-            _logger.LogInformation("Fetching quote for ticker: {Ticker}", ticker);
-
-            var securities = await Yahoo.Symbols(ticker).Fields(
-                Field.Symbol,
-                Field.RegularMarketPrice,
-                Field.RegularMarketPreviousClose,
-                Field.RegularMarketOpen,
-                Field.RegularMarketDayHigh,
-                Field.RegularMarketDayLow,
-                Field.RegularMarketVolume,
-                Field.AverageDailyVolume3Month,
-                Field.MarketCap,
-                Field.RegularMarketChange,
-                Field.RegularMarketChangePercent
-            ).QueryAsync();
-
-            if (!securities.Any())
+            var timeSinceLastRequest = DateTime.UtcNow - _lastRequestTime;
+            var delayNeeded = MinDelayBetweenRequestsMs - (int)timeSinceLastRequest.TotalMilliseconds;
+            
+            if (delayNeeded > 0)
             {
-                _logger.LogWarning("No data found for ticker: {Ticker}", ticker);
-                return Result.Failure<StockQuoteDto>(Error.NotFound("Stock", ticker));
+                _logger.LogDebug("Rate limiting: waiting {DelayMs}ms before next request", delayNeeded);
+                await Task.Delay(delayNeeded, cancellationToken);
             }
-
-            var security = securities.First().Value;
-            var quote = new StockQuoteDto(
-                Ticker: security.Symbol,
-                CurrentPrice: security.RegularMarketPrice,
-                PreviousClose: security.RegularMarketPreviousClose,
-                Change: security.RegularMarketChange,
-                ChangePercent: security.RegularMarketChangePercent,
-                Open: security.RegularMarketOpen,
-                High: security.RegularMarketDayHigh,
-                Low: security.RegularMarketDayLow,
-                Volume: security.RegularMarketVolume,
-                AverageVolume: security.AverageDailyVolume3Month,
-                LastUpdated: DateTime.UtcNow
-            );
-
-            _logger.LogInformation("Successfully fetched quote for {Ticker}: ${Price}", ticker, quote.CurrentPrice);
-            return Result.Success(quote);
+            
+            _lastRequestTime = DateTime.UtcNow;
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogError(ex, "Failed to fetch quote for ticker: {Ticker}", ticker);
-            return Result.Failure<StockQuoteDto>(Error.ProviderUnavailable($"Failed to fetch quote for {ticker}: {ex.Message}"));
+            _rateLimitSemaphore.Release();
         }
+    }
+
+    public async Task<Result<StockQuoteDto>> GetQuoteAsync(string ticker, CancellationToken cancellationToken = default)
+    {
+        const int maxRetries = 3;
+        int retryCount = 0;
+
+        while (retryCount < maxRetries)
+        {
+            try
+            {
+                await RateLimitAsync(cancellationToken);
+                
+                _logger.LogInformation("Fetching quote for ticker: {Ticker} (attempt {Attempt}/{Max})", 
+                    ticker, retryCount + 1, maxRetries);
+
+                var securities = await Yahoo.Symbols(ticker).Fields(
+                    Field.Symbol,
+                    Field.RegularMarketPrice,
+                    Field.RegularMarketPreviousClose,
+                    Field.RegularMarketOpen,
+                    Field.RegularMarketDayHigh,
+                    Field.RegularMarketDayLow,
+                    Field.RegularMarketVolume,
+                    Field.AverageDailyVolume3Month,
+                    Field.MarketCap,
+                    Field.RegularMarketChange,
+                    Field.RegularMarketChangePercent
+                ).QueryAsync();
+
+                if (!securities.Any())
+                {
+                    _logger.LogWarning("No data found for ticker: {Ticker}", ticker);
+                    return Result.Failure<StockQuoteDto>(Error.NotFound("Stock", ticker));
+                }
+
+                var security = securities.First().Value;
+                var quote = new StockQuoteDto(
+                    Ticker: security.Symbol,
+                    CurrentPrice: security.RegularMarketPrice,
+                    PreviousClose: security.RegularMarketPreviousClose,
+                    Change: security.RegularMarketChange,
+                    ChangePercent: security.RegularMarketChangePercent,
+                    Open: security.RegularMarketOpen,
+                    High: security.RegularMarketDayHigh,
+                    Low: security.RegularMarketDayLow,
+                    Volume: security.RegularMarketVolume,
+                    AverageVolume: security.AverageDailyVolume3Month,
+                    LastUpdated: DateTime.UtcNow
+                );
+
+                _logger.LogInformation("Successfully fetched quote for {Ticker}: ${Price}", ticker, quote.CurrentPrice);
+                return Result.Success(quote);
+            }
+            catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("Too Many Requests"))
+            {
+                retryCount++;
+                if (retryCount >= maxRetries)
+                {
+                    _logger.LogError(ex, "Rate limit exceeded for ticker: {Ticker} after {Retries} retries", ticker, maxRetries);
+                    return Result.Failure<StockQuoteDto>(Error.ProviderUnavailable(
+                        $"Yahoo Finance rate limit exceeded for {ticker}. Please try again later."));
+                }
+
+                var delayMs = retryCount * 5000; // Exponential backoff: 5s, 10s, 15s
+                _logger.LogWarning("Rate limited for {Ticker}, retrying in {DelayMs}ms (attempt {Attempt}/{Max})", 
+                    ticker, delayMs, retryCount + 1, maxRetries);
+                await Task.Delay(delayMs, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to fetch quote for ticker: {Ticker}", ticker);
+                return Result.Failure<StockQuoteDto>(Error.ProviderUnavailable($"Failed to fetch quote for {ticker}: {ex.Message}"));
+            }
+        }
+
+        return Result.Failure<StockQuoteDto>(Error.ProviderUnavailable($"Failed to fetch quote for {ticker} after {maxRetries} retries"));
     }
 
     public async Task<Result<IReadOnlyList<HistoricalPriceDto>>> GetHistoricalPricesAsync(
@@ -77,6 +128,8 @@ public sealed class YahooFinanceProvider : IStockDataProvider
     {
         try
         {
+            await RateLimitAsync(cancellationToken);
+            
             _logger.LogInformation("Fetching historical prices for {Ticker} from {StartDate} to {EndDate}", 
                 ticker, startDate, endDate);
 
@@ -96,6 +149,12 @@ public sealed class YahooFinanceProvider : IStockDataProvider
 
             return Result.Success<IReadOnlyList<HistoricalPriceDto>>(historicalPrices);
         }
+        catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("Too Many Requests"))
+        {
+            _logger.LogWarning(ex, "Rate limited while fetching historical prices for {Ticker}", ticker);
+            return Result.Failure<IReadOnlyList<HistoricalPriceDto>>(
+                Error.ProviderUnavailable($"Yahoo Finance rate limit exceeded. Please try again later."));
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to fetch historical prices for ticker: {Ticker}", ticker);
@@ -108,6 +167,8 @@ public sealed class YahooFinanceProvider : IStockDataProvider
     {
         try
         {
+            await RateLimitAsync(cancellationToken);
+            
             _logger.LogInformation("Fetching fundamentals for ticker: {Ticker}", ticker);
 
             var securities = await Yahoo.Symbols(ticker).Fields(
@@ -174,6 +235,12 @@ public sealed class YahooFinanceProvider : IStockDataProvider
             _logger.LogInformation("Successfully fetched fundamentals for {Ticker}", ticker);
             return Result.Success(fundamentals);
         }
+        catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("Too Many Requests"))
+        {
+            _logger.LogWarning(ex, "Rate limited while fetching fundamentals for {Ticker}", ticker);
+            return Result.Failure<StockFundamentalsDto>(
+                Error.ProviderUnavailable($"Yahoo Finance rate limit exceeded. Please try again later."));
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to fetch fundamentals for ticker: {Ticker}", ticker);
@@ -186,6 +253,8 @@ public sealed class YahooFinanceProvider : IStockDataProvider
     {
         try
         {
+            await RateLimitAsync(cancellationToken);
+            
             _logger.LogInformation("Fetching quotes for {Count} tickers", tickers.Count);
 
             var securities = await Yahoo.Symbols(tickers.ToArray()).Fields(
@@ -217,6 +286,12 @@ public sealed class YahooFinanceProvider : IStockDataProvider
 
             _logger.LogInformation("Successfully fetched quotes for {Count} tickers", quotes.Count);
             return Result.Success<IReadOnlyList<StockQuoteDto>>(quotes);
+        }
+        catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("Too Many Requests"))
+        {
+            _logger.LogWarning(ex, "Rate limited while fetching quotes for multiple tickers");
+            return Result.Failure<IReadOnlyList<StockQuoteDto>>(
+                Error.ProviderUnavailable($"Yahoo Finance rate limit exceeded. Please try again later."));
         }
         catch (Exception ex)
         {
