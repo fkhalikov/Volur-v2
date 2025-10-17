@@ -49,12 +49,15 @@ public sealed class GetSymbolsHandler
         // Try cache first unless force refresh
         if (!query.ForceRefresh)
         {
+            // Use "Common Stock" as default type filter if none specified
+            var typeFilter = !string.IsNullOrWhiteSpace(query.TypeFilter) ? query.TypeFilter : "Common Stock";
+            
             var cached = await _symbolRepository.GetByExchangeAsync(
                 query.ExchangeCode,
                 query.Page,
                 query.PageSize,
                 query.SearchQuery,
-                query.TypeFilter,
+                typeFilter,
                 cancellationToken);
 
             if (cached.HasValue)
@@ -89,7 +92,20 @@ public sealed class GetSymbolsHandler
         }
 
         var providerSymbols = providerResult.Value;
-        var domainSymbols = providerSymbols.Select(s => s.ToDomain()).ToList();
+        
+        // Filter for common stocks by default (unless a specific type filter is requested)
+        var filteredProviderSymbols = providerSymbols;
+        if (string.IsNullOrWhiteSpace(query.TypeFilter))
+        {
+            filteredProviderSymbols = providerSymbols
+                .Where(s => s.Type?.Equals("Common Stock", StringComparison.OrdinalIgnoreCase) == true)
+                .ToList();
+            
+            _logger.LogInformation("Filtered {OriginalCount} symbols to {FilteredCount} common stocks for {ExchangeCode}", 
+                providerSymbols.Count, filteredProviderSymbols.Count, query.ExchangeCode);
+        }
+        
+        var domainSymbols = filteredProviderSymbols.Select(s => s.ToDomain()).ToList();
         var fetchedAtUtc = DateTime.UtcNow;
 
         // Update cache
@@ -106,12 +122,13 @@ public sealed class GetSymbolsHandler
         }
 
         // Re-query with filters and pagination
+        var finalTypeFilter = !string.IsNullOrWhiteSpace(query.TypeFilter) ? query.TypeFilter : "Common Stock";
         var finalResult = await _symbolRepository.GetByExchangeAsync(
             query.ExchangeCode,
             query.Page,
             query.PageSize,
             query.SearchQuery,
-            query.TypeFilter,
+            finalTypeFilter,
             cancellationToken);
 
         if (!finalResult.HasValue)
