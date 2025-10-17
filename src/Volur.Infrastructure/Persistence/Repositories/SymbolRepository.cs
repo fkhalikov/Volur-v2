@@ -114,8 +114,20 @@ public sealed class SymbolRepository : ISymbolRepository
 
             if (writes.Count > 0)
             {
-                await _context.Symbols.BulkWriteAsync(writes, new BulkWriteOptions { IsOrdered = false }, cancellationToken);
-                _logger.LogDebug("Upserted {Count} symbols for {ExchangeCode}", writes.Count, exchangeCode);
+                // Process in batches to avoid MongoDB timeouts on large datasets
+                const int batchSize = 1000;
+                var totalProcessed = 0;
+                
+                for (int i = 0; i < writes.Count; i += batchSize)
+                {
+                    var batch = writes.Skip(i).Take(batchSize).ToList();
+                    await _context.Symbols.BulkWriteAsync(batch, new BulkWriteOptions { IsOrdered = false }, cancellationToken);
+                    totalProcessed += batch.Count;
+                    _logger.LogDebug("Upserted batch {Batch}/{Total} ({Count} symbols) for {ExchangeCode}", 
+                        (i / batchSize) + 1, (writes.Count + batchSize - 1) / batchSize, batch.Count, exchangeCode);
+                }
+                
+                _logger.LogInformation("Successfully upserted {Count} symbols for {ExchangeCode}", totalProcessed, exchangeCode);
             }
         }
         catch (Exception ex)
