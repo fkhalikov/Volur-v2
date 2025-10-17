@@ -19,13 +19,23 @@ export default function ExchangesPage() {
     setIsRefreshing(true)
     try {
       // Call the refresh endpoint
-      await fetch('http://localhost:5000/api/exchanges/refresh', {
+      const response = await fetch('http://localhost:5000/api/exchanges/refresh', {
         method: 'POST',
       })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to refresh' }))
+        throw new Error(errorData.message || `Server returned ${response.status}`)
+      }
+      
       // Refetch the data
       await refetch()
+      
+      // Show success message (optional)
+      alert('Exchanges refreshed successfully!')
     } catch (err) {
       console.error('Failed to refresh exchanges:', err)
+      alert(`Failed to refresh exchanges: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
       setIsRefreshing(false)
     }

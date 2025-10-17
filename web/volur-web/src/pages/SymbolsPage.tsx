@@ -58,13 +58,23 @@ export default function SymbolsPage() {
     setIsRefreshing(true)
     try {
       // Call the refresh endpoint
-      await fetch(`http://localhost:5000/api/exchanges/${code}/symbols/refresh`, {
+      const response = await fetch(`http://localhost:5000/api/exchanges/${code}/symbols/refresh`, {
         method: 'POST',
       })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to refresh' }))
+        throw new Error(errorData.message || `Server returned ${response.status}`)
+      }
+      
       // Refetch the data
       await refetch()
+      
+      // Show success message (optional)
+      alert('Symbols refreshed successfully!')
     } catch (err) {
       console.error('Failed to refresh symbols:', err)
+      alert(`Failed to refresh symbols: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
       setIsRefreshing(false)
     }
