@@ -85,7 +85,20 @@ public sealed class SymbolRepository : ISymbolRepository
         try
         {
             var expiresAt = fetchedAt.Add(ttl);
-            var writes = symbols.Select(s =>
+            
+            // De-duplicate by ticker (keep first occurrence)
+            var uniqueSymbols = symbols
+                .GroupBy(s => s.Ticker)
+                .Select(g => g.First())
+                .ToList();
+            
+            if (uniqueSymbols.Count < symbols.Count)
+            {
+                _logger.LogWarning("Removed {DuplicateCount} duplicate tickers for {ExchangeCode}", 
+                    symbols.Count - uniqueSymbols.Count, exchangeCode);
+            }
+            
+            var writes = uniqueSymbols.Select(s =>
             {
                 var doc = s.ToDocument(fetchedAt, expiresAt);
                 return new ReplaceOneModel<SymbolDocument>(
