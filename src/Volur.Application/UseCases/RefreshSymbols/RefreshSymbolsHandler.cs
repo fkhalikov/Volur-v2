@@ -54,7 +54,16 @@ public sealed class RefreshSymbolsHandler
         }
 
         var providerSymbols = providerResult.Value;
-        var domainSymbols = providerSymbols.Select(s => s.ToDomain()).ToList();
+        
+        // Filter for common stocks only
+        var filteredProviderSymbols = providerSymbols
+            .Where(s => s.Type?.Equals("Common Stock", StringComparison.OrdinalIgnoreCase) == true)
+            .ToList();
+        
+        _logger.LogInformation("Filtered {OriginalCount} symbols to {FilteredCount} common stocks for {ExchangeCode}", 
+            providerSymbols.Count, filteredProviderSymbols.Count, command.ExchangeCode);
+        
+        var domainSymbols = filteredProviderSymbols.Select(s => s.ToDomain()).ToList();
         var fetchedAtUtc = DateTime.UtcNow;
         var ttl = TimeSpan.FromHours(_cacheTtl.SymbolsHours);
 
