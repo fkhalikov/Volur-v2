@@ -89,6 +89,27 @@ public class ExchangesController : ControllerBase
     }
 
     /// <summary>
+    /// Force refresh the exchange list from the provider.
+    /// </summary>
+    [HttpPost("refresh")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> RefreshExchanges(CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Force refresh requested for exchanges");
+        var query = new GetExchangesQuery(ForceRefresh: true);
+        var result = await _getExchangesHandler.HandleAsync(query, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleError(result.Error!);
+        }
+
+        _logger.LogInformation("Successfully refreshed {Count} exchanges", result.Value.Count);
+        return NoContent();
+    }
+
+    /// <summary>
     /// Force refresh symbols for a specific exchange.
     /// </summary>
     [HttpPost("{code}/symbols/refresh")]
