@@ -39,6 +39,8 @@ public static class DocumentMapper
         {
             Ticker = entity.Ticker,
             ExchangeCode = entity.ExchangeCode,
+            ParentExchange = entity.ParentExchange,
+            FullSymbol = entity.FullSymbol,
             Name = entity.Name,
             Type = entity.Type,
             Isin = entity.Isin,
@@ -54,6 +56,7 @@ public static class DocumentMapper
         return new Symbol(
             Ticker: doc.Ticker,
             ExchangeCode: doc.ExchangeCode,
+            ParentExchange: doc.ParentExchange,
             Name: doc.Name,
             Type: doc.Type,
             Isin: doc.Isin,

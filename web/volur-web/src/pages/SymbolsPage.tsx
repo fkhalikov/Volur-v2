@@ -162,7 +162,7 @@ export default function SymbolsPage() {
               <thead className="bg-slate-700">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Ticker
+                    Symbol
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                     Name
@@ -183,14 +183,14 @@ export default function SymbolsPage() {
               </thead>
               <tbody className="bg-slate-800 divide-y divide-slate-700">
                 {data.items.map((symbol) => (
-                  <tr key={symbol.ticker} className="hover:bg-slate-700">
+                  <tr key={symbol.fullSymbol} className="hover:bg-slate-700">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
-                        onClick={() => handleCopyTicker(symbol.ticker)}
+                        onClick={() => handleCopyTicker(symbol.fullSymbol)}
                         className="text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer"
                         title="Click to copy"
                       >
-                        {symbol.ticker}
+                        {symbol.fullSymbol}
                       </button>
                     </td>
                     <td className="px-6 py-4">

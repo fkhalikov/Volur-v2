@@ -32,7 +32,7 @@ public sealed class SymbolRepository : ISymbolRepository
         try
         {
             var filterBuilder = Builders<SymbolDocument>.Filter;
-            var filter = filterBuilder.Eq(x => x.ExchangeCode, exchangeCode);
+            var filter = filterBuilder.Eq(x => x.ParentExchange, exchangeCode);
 
             // Apply search filter
             if (!string.IsNullOrWhiteSpace(searchQuery))
@@ -86,27 +86,28 @@ public sealed class SymbolRepository : ISymbolRepository
         {
             var expiresAt = fetchedAt.Add(ttl);
             
-            // De-duplicate by ticker (keep first occurrence)
-            var uniqueSymbols = symbols
-                .GroupBy(s => s.Ticker)
-                .Select(g => g.First())
-                .ToList();
-            
-            if (uniqueSymbols.Count < symbols.Count)
-            {
-                _logger.LogWarning("Removed {DuplicateCount} duplicate tickers for {ExchangeCode}", 
-                    symbols.Count - uniqueSymbols.Count, exchangeCode);
-            }
-            
-            var writes = uniqueSymbols.Select(s =>
+            var writes = symbols.Select(s =>
             {
                 var doc = s.ToDocument(fetchedAt, expiresAt);
-                return new ReplaceOneModel<SymbolDocument>(
-                    Builders<SymbolDocument>.Filter.And(
-                        Builders<SymbolDocument>.Filter.Eq(x => x.ExchangeCode, exchangeCode),
-                        Builders<SymbolDocument>.Filter.Eq(x => x.Ticker, s.Ticker)
-                    ),
-                    doc)
+                var filter = Builders<SymbolDocument>.Filter.And(
+                    Builders<SymbolDocument>.Filter.Eq(x => x.Ticker, s.Ticker),
+                    Builders<SymbolDocument>.Filter.Eq(x => x.ExchangeCode, s.ExchangeCode)
+                );
+                
+                var update = Builders<SymbolDocument>.Update
+                    .Set(x => x.Ticker, doc.Ticker)
+                    .Set(x => x.ExchangeCode, doc.ExchangeCode)
+                    .Set(x => x.ParentExchange, doc.ParentExchange)
+                    .Set(x => x.FullSymbol, doc.FullSymbol)
+                    .Set(x => x.Name, doc.Name)
+                    .Set(x => x.Type, doc.Type)
+                    .Set(x => x.Isin, doc.Isin)
+                    .Set(x => x.Currency, doc.Currency)
+                    .Set(x => x.IsActive, doc.IsActive)
+                    .Set(x => x.FetchedAt, doc.FetchedAt)
+                    .Set(x => x.ExpiresAt, doc.ExpiresAt);
+                
+                return new UpdateOneModel<SymbolDocument>(filter, update)
                 {
                     IsUpsert = true
                 };
@@ -142,7 +143,7 @@ public sealed class SymbolRepository : ISymbolRepository
         try
         {
             var result = await _context.Symbols.DeleteManyAsync(
-                x => x.ExchangeCode == exchangeCode,
+                x => x.ParentExchange == exchangeCode,
                 cancellationToken);
 
             _logger.LogDebug("Deleted {Count} symbols for {ExchangeCode}", result.DeletedCount, exchangeCode);

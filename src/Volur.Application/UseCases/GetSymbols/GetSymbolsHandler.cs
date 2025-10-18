@@ -5,6 +5,7 @@ using Volur.Application.Configuration;
 using Volur.Application.DTOs;
 using Volur.Application.Interfaces;
 using Volur.Application.Mappers;
+using Volur.Domain.Entities;
 using Volur.Shared;
 
 namespace Volur.Application.UseCases.GetSymbols;
@@ -46,12 +47,12 @@ public sealed class GetSymbolsHandler
 
         var ttl = TimeSpan.FromHours(_cacheTtl.SymbolsHours);
 
+        // Use "Common Stock" as default type filter if none specified
+        var typeFilter = !string.IsNullOrWhiteSpace(query.TypeFilter) ? query.TypeFilter : "Common Stock";
+        
         // Try cache first unless force refresh
         if (!query.ForceRefresh)
         {
-            // Use "Common Stock" as default type filter if none specified
-            var typeFilter = !string.IsNullOrWhiteSpace(query.TypeFilter) ? query.TypeFilter : "Common Stock";
-            
             var cached = await _symbolRepository.GetByExchangeAsync(
                 query.ExchangeCode,
                 query.Page,
@@ -74,7 +75,20 @@ public sealed class GetSymbolsHandler
                     return BuildSuccessResponse(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", ttlRemaining);
                 }
 
+                // If cache expired but we have a search query, return expired cache data instead of refreshing
+                if (!string.IsNullOrWhiteSpace(query.SearchQuery))
+                {
+                    _logger.LogInformation("Symbols cache expired for {ExchangeCode}, but returning expired cache for search query", query.ExchangeCode);
+                    return BuildSuccessResponse(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", 0);
+                }
+
                 _logger.LogInformation("Symbols cache expired for {ExchangeCode}, fetching from provider", query.ExchangeCode);
+            }
+            else if (!string.IsNullOrWhiteSpace(query.SearchQuery))
+            {
+                // No cached data but we have a search query - return empty results instead of refreshing
+                _logger.LogInformation("No cached symbols for {ExchangeCode} and search query provided, returning empty results", query.ExchangeCode);
+                return BuildSuccessResponse(exchange, Array.Empty<Symbol>(), query.Page, query.PageSize, 0, DateTime.UtcNow, "none", 0);
             }
         }
         else
@@ -105,7 +119,7 @@ public sealed class GetSymbolsHandler
                 providerSymbols.Count, filteredProviderSymbols.Count, query.ExchangeCode);
         }
         
-        var domainSymbols = filteredProviderSymbols.Select(s => s.ToDomain()).ToList();
+        var domainSymbols = filteredProviderSymbols.Select(s => s.ToDomain(query.ExchangeCode)).ToList();
         var fetchedAtUtc = DateTime.UtcNow;
 
         // Update cache
@@ -122,13 +136,12 @@ public sealed class GetSymbolsHandler
         }
 
         // Re-query with filters and pagination
-        var finalTypeFilter = !string.IsNullOrWhiteSpace(query.TypeFilter) ? query.TypeFilter : "Common Stock";
         var finalResult = await _symbolRepository.GetByExchangeAsync(
             query.ExchangeCode,
             query.Page,
             query.PageSize,
             query.SearchQuery,
-            finalTypeFilter,
+            typeFilter,
             cancellationToken);
 
         if (!finalResult.HasValue)

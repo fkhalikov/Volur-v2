@@ -10,10 +10,12 @@ public sealed class SymbolDocument
 {
     [BsonId]
     [BsonRepresentation(BsonType.ObjectId)]
-    public string Id { get; set; } = ObjectId.GenerateNewId().ToString();
+    public string? Id { get; set; }
 
     public string Ticker { get; set; } = string.Empty;
     public string ExchangeCode { get; set; } = string.Empty;
+    public string ParentExchange { get; set; } = string.Empty;
+    public string FullSymbol { get; set; } = string.Empty; // {Ticker}.{ExchangeCode}
     public string Name { get; set; } = string.Empty;
     public string? Type { get; set; }
     public string? Isin { get; set; }

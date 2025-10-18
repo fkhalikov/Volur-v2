@@ -23,12 +23,13 @@ public class SymbolMapperTests
         );
 
         // Act
-        var domain = dto.ToDomain();
+        var domain = dto.ToDomain("US");
 
         // Assert
         domain.Ticker.Should().Be("AAPL");
         domain.Name.Should().Be("Apple Inc.");
         domain.ExchangeCode.Should().Be("US");
+        domain.ParentExchange.Should().Be("US");
         domain.Currency.Should().Be("USD");
         domain.Type.Should().Be("Common Stock");
         domain.Isin.Should().Be("US0378331005");
@@ -54,7 +55,7 @@ public class SymbolMapperTests
         );
 
         // Act
-        var domain = dto.ToDomain();
+        var domain = dto.ToDomain("US");
 
         // Assert
         domain.IsActive.Should().Be(expectedIsActive);

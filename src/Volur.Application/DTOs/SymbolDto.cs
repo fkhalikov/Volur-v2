@@ -5,6 +5,7 @@ namespace Volur.Application.DTOs;
 /// </summary>
 public sealed record SymbolDto(
     string Ticker,
+    string FullSymbol,
     string Name,
     string? Type,
     string? Currency,

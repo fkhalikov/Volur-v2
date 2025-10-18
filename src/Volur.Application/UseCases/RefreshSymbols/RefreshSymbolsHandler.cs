@@ -63,7 +63,7 @@ public sealed class RefreshSymbolsHandler
         _logger.LogInformation("Filtered {OriginalCount} symbols to {FilteredCount} common stocks for {ExchangeCode}", 
             providerSymbols.Count, filteredProviderSymbols.Count, command.ExchangeCode);
         
-        var domainSymbols = filteredProviderSymbols.Select(s => s.ToDomain()).ToList();
+        var domainSymbols = filteredProviderSymbols.Select(s => s.ToDomain(command.ExchangeCode)).ToList();
         var fetchedAtUtc = DateTime.UtcNow;
         var ttl = TimeSpan.FromHours(_cacheTtl.SymbolsHours);
 

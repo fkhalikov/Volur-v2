@@ -50,12 +50,20 @@ public sealed class MongoDbContext
             // Symbols collection indexes
             var symbolIndexes = new List<CreateIndexModel<SymbolDocument>>
             {
-                // Compound unique index on exchangeCode + ticker
+                // Unique index on FullSymbol ({Ticker}.{ExchangeCode})
                 new CreateIndexModel<SymbolDocument>(
-                    Builders<SymbolDocument>.IndexKeys
-                        .Ascending(x => x.ExchangeCode)
-                        .Ascending(x => x.Ticker),
-                    new CreateIndexOptions { Unique = true, Name = "idx_exchange_ticker_unique" }
+                    Builders<SymbolDocument>.IndexKeys.Ascending(x => x.FullSymbol),
+                    new CreateIndexOptions { Name = "idx_fullsymbol_unique" }
+                ),
+                // Index on exchangeCode for filtering
+                new CreateIndexModel<SymbolDocument>(
+                    Builders<SymbolDocument>.IndexKeys.Ascending(x => x.ExchangeCode),
+                    new CreateIndexOptions { Name = "idx_exchangecode" }
+                ),
+                // Index on parentExchange for filtering
+                new CreateIndexModel<SymbolDocument>(
+                    Builders<SymbolDocument>.IndexKeys.Ascending(x => x.ParentExchange),
+                    new CreateIndexOptions { Name = "idx_parentexchange" }
                 ),
                 // TTL index on expiresAt
                 new CreateIndexModel<SymbolDocument>(
