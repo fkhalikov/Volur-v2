@@ -1,4 +1,4 @@
-import { ExchangesResponse, SymbolsResponse } from '../types/api'
+import { ExchangesResponse, SymbolsResponse, StockDetailsResponse } from '../types/api'
 
 const API_BASE_URL = '/api'
 
@@ -73,6 +73,18 @@ export const api = {
         errorData.error?.code
       )
     }
+  },
+
+  async getStockDetails(
+    ticker: string,
+    forceRefresh = false
+  ): Promise<StockDetailsResponse> {
+    const url = new URL(`${API_BASE_URL}/stocks/${ticker}/details`, window.location.origin)
+    if (forceRefresh) {
+      url.searchParams.set('forceRefresh', 'true')
+    }
+    const response = await fetch(url.toString())
+    return handleResponse<StockDetailsResponse>(response)
   },
 }
 

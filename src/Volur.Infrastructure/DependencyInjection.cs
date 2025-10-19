@@ -26,6 +26,7 @@ public static class DependencyInjection
         // Repositories
         services.AddScoped<IExchangeRepository, ExchangeRepository>();
         services.AddScoped<ISymbolRepository, SymbolRepository>();
+        services.AddScoped<IStockDataRepository, StockDataRepository>();
 
         // Stock Data Provider
         services.AddScoped<IStockDataProvider, EodhdStockDataProvider>();

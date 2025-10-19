@@ -154,5 +154,30 @@ public sealed class SymbolRepository : ISymbolRepository
             throw;
         }
     }
+
+    public async Task<Symbol?> GetByTickerAsync(string ticker, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var filter = Builders<SymbolDocument>.Filter.Eq(x => x.Ticker, ticker.ToUpperInvariant());
+            var document = await _context.Symbols.Find(filter).FirstOrDefaultAsync(cancellationToken);
+
+            if (document == null)
+            {
+                _logger.LogDebug("Symbol not found for ticker: {Ticker}", ticker);
+                return null;
+            }
+
+            var symbol = document.ToDomain();
+            _logger.LogDebug("Found symbol for ticker: {Ticker} on exchange {Exchange}", ticker, symbol.ExchangeCode);
+            
+            return symbol;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get symbol by ticker: {Ticker}", ticker);
+            return null;
+        }
+    }
 }
 

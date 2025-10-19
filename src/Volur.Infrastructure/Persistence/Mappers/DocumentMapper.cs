@@ -1,3 +1,4 @@
+using Volur.Application.DTOs;
 using Volur.Domain.Entities;
 using Volur.Infrastructure.Persistence.Models;
 
@@ -62,6 +63,134 @@ public static class DocumentMapper
             Isin: doc.Isin,
             Currency: doc.Currency,
             IsActive: doc.IsActive
+        );
+    }
+
+    public static StockQuoteDocument ToDocument(this StockQuoteDto dto, DateTime fetchedAt)
+    {
+        return new StockQuoteDocument
+        {
+            Ticker = dto.Ticker,
+            CurrentPrice = dto.CurrentPrice,
+            PreviousClose = dto.PreviousClose,
+            Change = dto.Change,
+            ChangePercent = dto.ChangePercent,
+            Open = dto.Open,
+            High = dto.High,
+            Low = dto.Low,
+            Volume = dto.Volume,
+            AverageVolume = dto.AverageVolume,
+            LastUpdated = dto.LastUpdated,
+            FetchedAt = fetchedAt
+        };
+    }
+
+    public static StockQuoteDto ToDto(this StockQuoteDocument doc)
+    {
+        return new StockQuoteDto(
+            Ticker: doc.Ticker,
+            CurrentPrice: doc.CurrentPrice,
+            PreviousClose: doc.PreviousClose,
+            Change: doc.Change,
+            ChangePercent: doc.ChangePercent,
+            Open: doc.Open,
+            High: doc.High,
+            Low: doc.Low,
+            Volume: doc.Volume,
+            AverageVolume: doc.AverageVolume,
+            LastUpdated: doc.LastUpdated
+        );
+    }
+
+    public static StockFundamentalsDocument ToDocument(this StockFundamentalsDto dto, DateTime fetchedAt)
+    {
+        return new StockFundamentalsDocument
+        {
+            Ticker = dto.Ticker,
+            CompanyName = dto.CompanyName,
+            Sector = dto.Sector,
+            Industry = dto.Industry,
+            Description = dto.Description,
+            Website = dto.Website,
+            LogoUrl = dto.LogoUrl,
+            MarketCap = dto.MarketCap,
+            EnterpriseValue = dto.EnterpriseValue,
+            TrailingPE = dto.TrailingPE,
+            ForwardPE = dto.ForwardPE,
+            PEG = dto.PEG,
+            PriceToSales = dto.PriceToSales,
+            PriceToBook = dto.PriceToBook,
+            EnterpriseToRevenue = dto.EnterpriseToRevenue,
+            EnterpriseToEbitda = dto.EnterpriseToEbitda,
+            ProfitMargins = dto.ProfitMargins,
+            GrossMargins = dto.GrossMargins,
+            OperatingMargins = dto.OperatingMargins,
+            ReturnOnAssets = dto.ReturnOnAssets,
+            ReturnOnEquity = dto.ReturnOnEquity,
+            Revenue = dto.Revenue,
+            RevenuePerShare = dto.RevenuePerShare,
+            QuarterlyRevenueGrowth = dto.QuarterlyRevenueGrowth,
+            QuarterlyEarningsGrowth = dto.QuarterlyEarningsGrowth,
+            TotalCash = dto.TotalCash,
+            TotalCashPerShare = dto.TotalCashPerShare,
+            TotalDebt = dto.TotalDebt,
+            DebtToEquity = dto.DebtToEquity,
+            CurrentRatio = dto.CurrentRatio,
+            BookValue = dto.BookValue,
+            PriceToBookValue = dto.PriceToBookValue,
+            DividendRate = dto.DividendRate,
+            DividendYield = dto.DividendYield,
+            PayoutRatio = dto.PayoutRatio,
+            Beta = dto.Beta,
+            FiftyTwoWeekLow = dto.FiftyTwoWeekLow,
+            FiftyTwoWeekHigh = dto.FiftyTwoWeekHigh,
+            LastUpdated = dto.LastUpdated,
+            FetchedAt = fetchedAt
+        };
+    }
+
+    public static StockFundamentalsDto ToDto(this StockFundamentalsDocument doc)
+    {
+        return new StockFundamentalsDto(
+            Ticker: doc.Ticker,
+            CompanyName: doc.CompanyName,
+            Sector: doc.Sector,
+            Industry: doc.Industry,
+            Description: doc.Description,
+            Website: doc.Website,
+            LogoUrl: doc.LogoUrl,
+            MarketCap: doc.MarketCap,
+            EnterpriseValue: doc.EnterpriseValue,
+            TrailingPE: doc.TrailingPE,
+            ForwardPE: doc.ForwardPE,
+            PEG: doc.PEG,
+            PriceToSales: doc.PriceToSales,
+            PriceToBook: doc.PriceToBook,
+            EnterpriseToRevenue: doc.EnterpriseToRevenue,
+            EnterpriseToEbitda: doc.EnterpriseToEbitda,
+            ProfitMargins: doc.ProfitMargins,
+            GrossMargins: doc.GrossMargins,
+            OperatingMargins: doc.OperatingMargins,
+            ReturnOnAssets: doc.ReturnOnAssets,
+            ReturnOnEquity: doc.ReturnOnEquity,
+            Revenue: doc.Revenue,
+            RevenuePerShare: doc.RevenuePerShare,
+            QuarterlyRevenueGrowth: doc.QuarterlyRevenueGrowth,
+            QuarterlyEarningsGrowth: doc.QuarterlyEarningsGrowth,
+            TotalCash: doc.TotalCash,
+            TotalCashPerShare: doc.TotalCashPerShare,
+            TotalDebt: doc.TotalDebt,
+            DebtToEquity: doc.DebtToEquity,
+            CurrentRatio: doc.CurrentRatio,
+            BookValue: doc.BookValue,
+            PriceToBookValue: doc.PriceToBookValue,
+            DividendRate: doc.DividendRate,
+            DividendYield: doc.DividendYield,
+            PayoutRatio: doc.PayoutRatio,
+            Beta: doc.Beta,
+            FiftyTwoWeekLow: doc.FiftyTwoWeekLow,
+            FiftyTwoWeekHigh: doc.FiftyTwoWeekHigh,
+            LastUpdated: doc.LastUpdated
         );
     }
 }

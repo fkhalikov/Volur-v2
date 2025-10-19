@@ -29,6 +29,12 @@ public sealed class MongoDbContext
     public IMongoCollection<SymbolDocument> Symbols => 
         _database.GetCollection<SymbolDocument>("symbols");
 
+    public IMongoCollection<StockQuoteDocument> StockQuotes => 
+        _database.GetCollection<StockQuoteDocument>("stockQuotes");
+
+    public IMongoCollection<StockFundamentalsDocument> StockFundamentals => 
+        _database.GetCollection<StockFundamentalsDocument>("stockFundamentals");
+
     /// <summary>
     /// Ensures all required indexes are created.
     /// </summary>
@@ -87,6 +93,38 @@ public sealed class MongoDbContext
                 )
             };
             await Symbols.Indexes.CreateManyAsync(symbolIndexes, cancellationToken);
+
+            // Stock quotes collection indexes
+            var quoteIndexes = new List<CreateIndexModel<StockQuoteDocument>>
+            {
+                // Unique index on ticker
+                new CreateIndexModel<StockQuoteDocument>(
+                    Builders<StockQuoteDocument>.IndexKeys.Ascending(x => x.Ticker),
+                    new CreateIndexOptions { Unique = true, Name = "idx_ticker_unique" }
+                ),
+                // Index on fetchedAt for sorting
+                new CreateIndexModel<StockQuoteDocument>(
+                    Builders<StockQuoteDocument>.IndexKeys.Descending(x => x.FetchedAt),
+                    new CreateIndexOptions { Name = "idx_fetchedat" }
+                )
+            };
+            await StockQuotes.Indexes.CreateManyAsync(quoteIndexes, cancellationToken);
+
+            // Stock fundamentals collection indexes
+            var fundamentalsIndexes = new List<CreateIndexModel<StockFundamentalsDocument>>
+            {
+                // Unique index on ticker
+                new CreateIndexModel<StockFundamentalsDocument>(
+                    Builders<StockFundamentalsDocument>.IndexKeys.Ascending(x => x.Ticker),
+                    new CreateIndexOptions { Unique = true, Name = "idx_ticker_unique" }
+                ),
+                // Index on fetchedAt for sorting
+                new CreateIndexModel<StockFundamentalsDocument>(
+                    Builders<StockFundamentalsDocument>.IndexKeys.Descending(x => x.FetchedAt),
+                    new CreateIndexOptions { Name = "idx_fetchedat" }
+                )
+            };
+            await StockFundamentals.Indexes.CreateManyAsync(fundamentalsIndexes, cancellationToken);
 
             _logger.LogInformation("MongoDB indexes created successfully");
         }

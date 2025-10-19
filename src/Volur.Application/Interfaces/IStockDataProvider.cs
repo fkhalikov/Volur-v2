@@ -14,6 +14,11 @@ public interface IStockDataProvider
     Task<Result<StockQuoteDto>> GetQuoteAsync(string ticker, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets real-time stock quote for a ticker on a specific exchange.
+    /// </summary>
+    Task<Result<StockQuoteDto>> GetQuoteAsync(string ticker, string exchange, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets historical price data for a ticker.
     /// </summary>
     Task<Result<IReadOnlyList<HistoricalPriceDto>>> GetHistoricalPricesAsync(
@@ -26,6 +31,11 @@ public interface IStockDataProvider
     /// Gets fundamental data for a ticker.
     /// </summary>
     Task<Result<StockFundamentalsDto>> GetFundamentalsAsync(string ticker, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets fundamental data for a ticker on a specific exchange.
+    /// </summary>
+    Task<Result<StockFundamentalsDto>> GetFundamentalsAsync(string ticker, string exchange, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets multiple stock quotes in a single request.

@@ -3,6 +3,7 @@ using Volur.Api.Models;
 using Volur.Application.UseCases.GetStockQuote;
 using Volur.Application.UseCases.GetStockFundamentals;
 using Volur.Application.UseCases.GetHistoricalPrices;
+using Volur.Application.UseCases.GetStockDetails;
 
 namespace Volur.Api.Controllers;
 
@@ -13,18 +14,53 @@ public class StockDataController : ControllerBase
     private readonly GetStockQuoteHandler _getQuoteHandler;
     private readonly GetStockFundamentalsHandler _getFundamentalsHandler;
     private readonly GetHistoricalPricesHandler _getHistoricalPricesHandler;
+    private readonly GetStockDetailsHandler _getStockDetailsHandler;
     private readonly ILogger<StockDataController> _logger;
 
     public StockDataController(
         GetStockQuoteHandler getQuoteHandler,
         GetStockFundamentalsHandler getFundamentalsHandler,
         GetHistoricalPricesHandler getHistoricalPricesHandler,
+        GetStockDetailsHandler getStockDetailsHandler,
         ILogger<StockDataController> logger)
     {
         _getQuoteHandler = getQuoteHandler;
         _getFundamentalsHandler = getFundamentalsHandler;
         _getHistoricalPricesHandler = getHistoricalPricesHandler;
+        _getStockDetailsHandler = getStockDetailsHandler;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Get combined stock details including symbol, quote, and fundamentals.
+    /// </summary>
+    [HttpGet("{ticker}/details")]
+    [ProducesResponseType(typeof(Application.DTOs.StockDetailsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetDetails(
+        string ticker, 
+        [FromQuery] bool forceRefresh = false,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(ticker))
+        {
+            return BadRequest(new ErrorResponse(
+                "VALIDATION_ERROR",
+                "Ticker is required.",
+                HttpContext.TraceIdentifier
+            ));
+        }
+
+        var query = new GetStockDetailsQuery(ticker.ToUpperInvariant(), forceRefresh);
+        var result = await _getStockDetailsHandler.HandleAsync(query, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleError(result.Error!);
+        }
+
+        return Ok(result.Value);
     }
 
     /// <summary>

@@ -18,6 +18,7 @@ public sealed class GetSymbolsHandler
 {
     private readonly ISymbolRepository _symbolRepository;
     private readonly IExchangeRepository _exchangeRepository;
+    private readonly IStockDataRepository _stockDataRepository;
     private readonly IEodhdClient _eodhdClient;
     private readonly ILogger<GetSymbolsHandler> _logger;
     private readonly CacheTtlOptions _cacheTtl;
@@ -25,12 +26,14 @@ public sealed class GetSymbolsHandler
     public GetSymbolsHandler(
         ISymbolRepository symbolRepository,
         IExchangeRepository exchangeRepository,
+        IStockDataRepository stockDataRepository,
         IEodhdClient eodhdClient,
         ILogger<GetSymbolsHandler> logger,
         IOptions<CacheTtlOptions> cacheTtl)
     {
         _symbolRepository = symbolRepository;
         _exchangeRepository = exchangeRepository;
+        _stockDataRepository = stockDataRepository;
         _eodhdClient = eodhdClient;
         _logger = logger;
         _cacheTtl = cacheTtl.Value;
@@ -72,14 +75,14 @@ public sealed class GetSymbolsHandler
                     _logger.LogInformation("Symbols cache hit for {ExchangeCode}. TTL remaining: {TtlSeconds}s", 
                         query.ExchangeCode, ttlRemaining);
 
-                    return BuildSuccessResponse(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", ttlRemaining);
+                    return await BuildSuccessResponseAsync(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", ttlRemaining, cancellationToken);
                 }
 
                 // If cache expired but we have a search query, return expired cache data instead of refreshing
                 if (!string.IsNullOrWhiteSpace(query.SearchQuery))
                 {
                     _logger.LogInformation("Symbols cache expired for {ExchangeCode}, but returning expired cache for search query", query.ExchangeCode);
-                    return BuildSuccessResponse(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", 0);
+                    return await BuildSuccessResponseAsync(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", 0, cancellationToken);
                 }
 
                 _logger.LogInformation("Symbols cache expired for {ExchangeCode}, fetching from provider", query.ExchangeCode);
@@ -88,7 +91,7 @@ public sealed class GetSymbolsHandler
             {
                 // No cached data but we have a search query - return empty results instead of refreshing
                 _logger.LogInformation("No cached symbols for {ExchangeCode} and search query provided, returning empty results", query.ExchangeCode);
-                return BuildSuccessResponse(exchange, Array.Empty<Symbol>(), query.Page, query.PageSize, 0, DateTime.UtcNow, "none", 0);
+                return await BuildSuccessResponseAsync(exchange, Array.Empty<Symbol>(), query.Page, query.PageSize, 0, DateTime.UtcNow, "none", 0, cancellationToken);
             }
         }
         else
@@ -157,10 +160,10 @@ public sealed class GetSymbolsHandler
         }
 
         var (filteredSymbols, finalTotalCount, _) = finalResult.Value;
-        return BuildSuccessResponse(exchange, filteredSymbols, query.Page, query.PageSize, finalTotalCount, fetchedAtUtc, "provider", (int)ttl.TotalSeconds);
+        return await BuildSuccessResponseAsync(exchange, filteredSymbols, query.Page, query.PageSize, finalTotalCount, fetchedAtUtc, "provider", (int)ttl.TotalSeconds, cancellationToken);
     }
 
-    private static Result<SymbolsResponse> BuildSuccessResponse(
+    private async Task<Result<SymbolsResponse>> BuildSuccessResponseAsync(
         Domain.Entities.Exchange exchange,
         IReadOnlyList<Domain.Entities.Symbol> symbols,
         int page,
@@ -168,17 +171,72 @@ public sealed class GetSymbolsHandler
         int totalCount,
         DateTime fetchedAt,
         string cacheSource,
-        int ttlSeconds)
+        int ttlSeconds,
+        CancellationToken cancellationToken)
     {
         var hasNext = (page * pageSize) < totalCount;
+
+        // Fetch fundamental data for all symbols in parallel
+        var symbolDtos = await EnrichSymbolsWithFundamentalDataAsync(symbols, cancellationToken);
 
         return Result.Success(new SymbolsResponse(
             Exchange: exchange.ToDto(),
             Pagination: new PaginationMetadata(page, pageSize, totalCount, hasNext),
-            Items: symbols.Select(s => s.ToDto()).ToList(),
+            Items: symbolDtos,
             FetchedAt: fetchedAt,
             Cache: new CacheMetadata(cacheSource, ttlSeconds)
         ));
+    }
+
+    private async Task<List<SymbolDto>> EnrichSymbolsWithFundamentalDataAsync(
+        IReadOnlyList<Domain.Entities.Symbol> symbols,
+        CancellationToken cancellationToken)
+    {
+        if (!symbols.Any())
+            return new List<SymbolDto>();
+
+        _logger.LogInformation("Enriching {Count} symbols with fundamental data", symbols.Count);
+
+        // Create tasks to fetch quote and fundamental data for each symbol
+        var enrichmentTasks = symbols.Select(async symbol =>
+        {
+            try
+            {
+                _logger.LogDebug("Fetching fundamental data for symbol {Ticker}", symbol.Ticker);
+                
+                // Fetch cached quote and fundamentals data in parallel
+                var quoteTask = _stockDataRepository.GetQuoteAsync(symbol.Ticker, cancellationToken);
+                var fundamentalsTask = _stockDataRepository.GetFundamentalsAsync(symbol.Ticker, cancellationToken);
+
+                await Task.WhenAll(quoteTask, fundamentalsTask);
+
+                var quoteResult = await quoteTask;
+                var fundamentalsResult = await fundamentalsTask;
+
+                _logger.LogDebug("Symbol {Ticker}: Quote={HasQuote}, Fundamentals={HasFundamentals}", 
+                    symbol.Ticker, quoteResult?.quote != null, fundamentalsResult?.fundamentals != null);
+
+                return symbol.ToDto(
+                    quote: quoteResult?.quote,
+                    fundamentals: fundamentalsResult?.fundamentals,
+                    fundamentalsFetchedAt: fundamentalsResult?.fetchedAt
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to enrich symbol {Ticker} with fundamental data", symbol.Ticker);
+                // Return basic symbol data without enrichment
+                return symbol.ToDto();
+            }
+        });
+
+        var enrichedSymbols = await Task.WhenAll(enrichmentTasks);
+        
+        var enrichedCount = enrichedSymbols.Count(s => s.MarketCap.HasValue || s.CurrentPrice.HasValue);
+        _logger.LogInformation("Successfully enriched {EnrichedCount} of {TotalCount} symbols with fundamental data", 
+            enrichedCount, symbols.Count);
+
+        return enrichedSymbols.ToList();
     }
 }
 

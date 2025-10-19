@@ -27,5 +27,10 @@ public interface ISymbolRepository
     /// Deletes all symbols for an exchange (for refresh scenarios).
     /// </summary>
     Task DeleteByExchangeAsync(string exchangeCode, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets a symbol by ticker (searches across all exchanges).
+    /// </summary>
+    Task<Symbol?> GetByTickerAsync(string ticker, CancellationToken cancellationToken = default);
 }
 

@@ -29,5 +29,21 @@ public static class SymbolMapper
         Isin: entity.Isin,
         IsActive: entity.IsActive
     );
+
+    public static SymbolDto ToDto(this Symbol entity, StockQuoteDto? quote, StockFundamentalsDto? fundamentals, DateTime? fundamentalsFetchedAt) => new(
+        Ticker: entity.Ticker,
+        FullSymbol: entity.FullSymbol,
+        Name: entity.Name,
+        Type: entity.Type,
+        Currency: entity.Currency,
+        Isin: entity.Isin,
+        IsActive: entity.IsActive,
+        MarketCap: fundamentals?.MarketCap,
+        TrailingPE: fundamentals?.TrailingPE,
+        DividendYield: fundamentals?.DividendYield,
+        CurrentPrice: quote?.CurrentPrice,
+        ChangePercent: quote?.ChangePercent,
+        FundamentalsFetchedAt: fundamentalsFetchedAt
+    );
 }
 

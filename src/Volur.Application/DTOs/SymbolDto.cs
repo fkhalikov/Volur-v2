@@ -1,7 +1,7 @@
 namespace Volur.Application.DTOs;
 
 /// <summary>
-/// Data transfer object for Symbol.
+/// Data transfer object for Symbol with optional fundamental data.
 /// </summary>
 public sealed record SymbolDto(
     string Ticker,
@@ -10,6 +10,14 @@ public sealed record SymbolDto(
     string? Type,
     string? Currency,
     string? Isin,
-    bool IsActive
+    bool IsActive,
+    
+    // Fundamental data (optional - may be null if not available)
+    double? MarketCap = null,
+    double? TrailingPE = null,
+    double? DividendYield = null,
+    double? CurrentPrice = null,
+    double? ChangePercent = null,
+    DateTime? FundamentalsFetchedAt = null
 );
 
