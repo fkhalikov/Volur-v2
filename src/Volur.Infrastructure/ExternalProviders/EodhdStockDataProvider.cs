@@ -294,45 +294,45 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
     private static StockFundamentalsDto MapToStockFundamentalsDto(Volur.Application.DTOs.Provider.EodhdFundamentalDto eodhdFundamentals)
     {
         return new StockFundamentalsDto(
-            Ticker: eodhdFundamentals.Code,
-            CompanyName: eodhdFundamentals.Name ?? eodhdFundamentals.General?.Name,
-            Sector: eodhdFundamentals.General?.GicSector ?? eodhdFundamentals.Sector,
-            Industry: eodhdFundamentals.General?.GicIndustry ?? eodhdFundamentals.Industry,
-            Description: eodhdFundamentals.Description ?? eodhdFundamentals.General?.Description,
-            Website: eodhdFundamentals.Website ?? eodhdFundamentals.General?.WebUrl,
-            LogoUrl: eodhdFundamentals.LogoUrl ?? eodhdFundamentals.General?.LogoUrl,
-            MarketCap: eodhdFundamentals.MarketCapitalization ?? eodhdFundamentals.Highlights?.MarketCapitalization,
-            EnterpriseValue: null, // EODHD doesn't provide enterprise value directly
-            TrailingPE: eodhdFundamentals.Highlights?.PeRatio,
-            ForwardPE: null, // EODHD doesn't provide forward PE directly
-            PEG: eodhdFundamentals.Highlights?.PegRatio,
-            PriceToSales: eodhdFundamentals.Valuation?.PriceSalesTtm,
-            PriceToBook: eodhdFundamentals.Valuation?.PriceBookMrq,
-            EnterpriseToRevenue: eodhdFundamentals.Valuation?.EnterpriseValueRevenue,
-            EnterpriseToEbitda: eodhdFundamentals.Valuation?.EnterpriseValueEbitda,
-            ProfitMargins: eodhdFundamentals.Highlights?.ProfitMargin,
+            Ticker: eodhdFundamentals.General.Code,
+            CompanyName: eodhdFundamentals.General.Name,
+            Sector: eodhdFundamentals.General.GicSector ?? eodhdFundamentals.General.Sector,
+            Industry: eodhdFundamentals.General.GicIndustry ?? eodhdFundamentals.General.Industry,
+            Description: eodhdFundamentals.General.Description,
+            Website: eodhdFundamentals.General.WebUrl,
+            LogoUrl: eodhdFundamentals.General.LogoUrl,
+            MarketCap: eodhdFundamentals.Highlights.MarketCapitalization,
+            EnterpriseValue: eodhdFundamentals.Valuation.EnterpriseValue,
+            TrailingPE: eodhdFundamentals.Valuation.TrailingPe,
+            ForwardPE: eodhdFundamentals.Valuation.ForwardPe,
+            PEG: eodhdFundamentals.Highlights.PegRatio,
+            PriceToSales: eodhdFundamentals.Valuation.PriceSalesTtm,
+            PriceToBook: eodhdFundamentals.Valuation.PriceBookMrq,
+            EnterpriseToRevenue: eodhdFundamentals.Valuation.EnterpriseValueRevenue,
+            EnterpriseToEbitda: eodhdFundamentals.Valuation.EnterpriseValueEbitda,
+            ProfitMargins: eodhdFundamentals.Highlights.ProfitMargin,
             GrossMargins: null, // EODHD doesn't provide gross margins directly
-            OperatingMargins: eodhdFundamentals.Highlights?.OperatingMarginTtm,
-            ReturnOnAssets: eodhdFundamentals.Highlights?.ReturnOnAssetsTtm,
-            ReturnOnEquity: eodhdFundamentals.Highlights?.ReturnOnEquityTtm,
-            Revenue: eodhdFundamentals.Highlights?.RevenueTtm,
-            RevenuePerShare: eodhdFundamentals.Highlights?.RevenuePerShareTtm,
-            QuarterlyRevenueGrowth: eodhdFundamentals.Highlights?.QuarterlyRevenueGrowthYoy,
-            QuarterlyEarningsGrowth: eodhdFundamentals.Highlights?.QuarterlyEarningsGrowthYoy,
+            OperatingMargins: eodhdFundamentals.Highlights.OperatingMarginTtm,
+            ReturnOnAssets: eodhdFundamentals.Highlights.ReturnOnAssetsTtm,
+            ReturnOnEquity: eodhdFundamentals.Highlights.ReturnOnEquityTtm,
+            Revenue: eodhdFundamentals.Highlights.RevenueTtm,
+            RevenuePerShare: eodhdFundamentals.Highlights.RevenuePerShareTtm,
+            QuarterlyRevenueGrowth: eodhdFundamentals.Highlights.QuarterlyRevenueGrowthYoy,
+            QuarterlyEarningsGrowth: eodhdFundamentals.Highlights.QuarterlyEarningsGrowthYoy,
             TotalCash: null, // EODHD doesn't provide cash data directly
             TotalCashPerShare: null,
             TotalDebt: null, // EODHD doesn't provide debt data directly
             DebtToEquity: null,
             CurrentRatio: null, // EODHD doesn't provide current ratio directly
-            BookValue: eodhdFundamentals.Highlights?.BookValue,
-            PriceToBookValue: eodhdFundamentals.Valuation?.PriceBookMrq,
-            DividendRate: eodhdFundamentals.Highlights?.DividendShare,
-            DividendYield: eodhdFundamentals.Highlights?.DividendYield,
-            PayoutRatio: null, // EODHD doesn't provide payout ratio directly
-            Beta: eodhdFundamentals.Technicals?.Beta,
-            FiftyTwoWeekLow: eodhdFundamentals.Technicals?.FiftyTwoWeekLow,
-            FiftyTwoWeekHigh: eodhdFundamentals.Technicals?.FiftyTwoWeekHigh,
-            LastUpdated: DateTime.UtcNow
+            BookValue: eodhdFundamentals.Highlights.BookValue,
+            PriceToBookValue: eodhdFundamentals.Valuation.PriceBookMrq,
+            DividendRate: eodhdFundamentals.Highlights.DividendShare,
+            DividendYield: eodhdFundamentals.Highlights.DividendYield,
+            PayoutRatio: eodhdFundamentals.SplitsDividends.PayoutRatio,
+            Beta: eodhdFundamentals.Technicals.Beta,
+            FiftyTwoWeekLow: eodhdFundamentals.Technicals.FiftyTwoWeekLow,
+            FiftyTwoWeekHigh: eodhdFundamentals.Technicals.FiftyTwoWeekHigh,
+            LastUpdated: DateTime.TryParse(eodhdFundamentals.General.UpdatedAt, out var updatedAt) ? updatedAt : DateTime.UtcNow
         );
     }
 
