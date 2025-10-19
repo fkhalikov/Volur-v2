@@ -1,18 +1,22 @@
+using System.Text.Json.Serialization;
+
 namespace Volur.Application.DTOs.Provider;
 
 /// <summary>
 /// EODHD real-time stock quote response.
 /// </summary>
 public sealed record EodhdStockQuoteDto(
-    string Code,
-    string Exchange,
-    double? PreviousClose,
-    double? Open,
-    double? High,
-    double? Low,
-    double? Close,
-    long? Volume,
-    DateTime? Timestamp
+    [property: JsonPropertyName("code")] string Code,
+    [property: JsonPropertyName("timestamp")] long Timestamp,
+    [property: JsonPropertyName("gmtoffset")] int GmtOffset,
+    [property: JsonPropertyName("open")] double Open,
+    [property: JsonPropertyName("high")] double High,
+    [property: JsonPropertyName("low")] double Low,
+    [property: JsonPropertyName("close")] double Close,
+    [property: JsonPropertyName("volume")] long Volume,
+    [property: JsonPropertyName("previousClose")] double PreviousClose,
+    [property: JsonPropertyName("change")] double Change,
+    [property: JsonPropertyName("change_p")] double ChangeP
 );
 
 /// <summary>

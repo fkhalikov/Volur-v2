@@ -9,6 +9,7 @@ using Volur.Application.UseCases.GetStockQuote;
 using Volur.Application.UseCases.GetStockFundamentals;
 using Volur.Application.UseCases.GetHistoricalPrices;
 using Volur.Application.UseCases.GetStockDetails;
+using Volur.Application.UseCases.BulkFetchFundamentals;
 
 namespace Volur.Application;
 
@@ -30,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<GetStockFundamentalsHandler>();
         services.AddScoped<GetHistoricalPricesHandler>();
         services.AddScoped<GetStockDetailsHandler>();
+        services.AddScoped<BulkFetchFundamentalsHandler>();
 
         // Validators
         services.AddValidatorsFromAssemblyContaining<GetSymbolsQuery>();

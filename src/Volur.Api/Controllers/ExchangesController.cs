@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Volur.Application.UseCases.BulkFetchFundamentals;
 using Volur.Application.UseCases.GetExchanges;
 using Volur.Application.UseCases.GetSymbols;
 using Volur.Application.UseCases.RefreshSymbols;
@@ -14,17 +15,20 @@ public class ExchangesController : ControllerBase
     private readonly GetExchangesHandler _getExchangesHandler;
     private readonly GetSymbolsHandler _getSymbolsHandler;
     private readonly RefreshSymbolsHandler _refreshSymbolsHandler;
+    private readonly BulkFetchFundamentalsHandler _bulkFetchFundamentalsHandler;
     private readonly ILogger<ExchangesController> _logger;
 
     public ExchangesController(
         GetExchangesHandler getExchangesHandler,
         GetSymbolsHandler getSymbolsHandler,
         RefreshSymbolsHandler refreshSymbolsHandler,
+        BulkFetchFundamentalsHandler bulkFetchFundamentalsHandler,
         ILogger<ExchangesController> logger)
     {
         _getExchangesHandler = getExchangesHandler;
         _getSymbolsHandler = getSymbolsHandler;
         _refreshSymbolsHandler = refreshSymbolsHandler;
+        _bulkFetchFundamentalsHandler = bulkFetchFundamentalsHandler;
         _logger = logger;
     }
 
@@ -141,6 +145,47 @@ public class ExchangesController : ControllerBase
             "PROVIDER_RATE_LIMIT" => StatusCode(StatusCodes.Status429TooManyRequests, errorResponse),
             _ => StatusCode(StatusCodes.Status500InternalServerError, errorResponse)
         };
+    }
+
+    /// <summary>
+    /// Bulk fetch fundamental data for symbols without cached data.
+    /// </summary>
+    [HttpPost("{exchangeCode}/symbols/bulk-fetch-fundamentals")]
+    [ProducesResponseType(typeof(BulkFetchFundamentalsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> BulkFetchFundamentals(
+        string exchangeCode,
+        [FromQuery] int batchSize = 3000,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(exchangeCode))
+        {
+            return BadRequest(new ErrorResponse(
+                "VALIDATION_ERROR",
+                "Exchange code is required.",
+                HttpContext.TraceIdentifier
+            ));
+        }
+
+        if (batchSize <= 0 || batchSize > 5000)
+        {
+            return BadRequest(new ErrorResponse(
+                "VALIDATION_ERROR",
+                "Batch size must be between 1 and 5000.",
+                HttpContext.TraceIdentifier
+            ));
+        }
+
+        var command = new BulkFetchFundamentalsCommand(exchangeCode.ToUpperInvariant(), batchSize);
+        var result = await _bulkFetchFundamentalsHandler.HandleAsync(command, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleError(result.Error!);
+        }
+
+        return Ok(result.Value);
     }
 }
 

@@ -25,25 +25,38 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
         {
             _logger.LogInformation("Fetching quote for ticker: {Ticker}", ticker);
 
-            // Try different exchanges based on common patterns
-            var exchanges = GetLikelyExchanges(ticker);
-            
-            foreach (var exchange in exchanges)
+            // Check if ticker is in full symbol format (e.g., "0A00.LSE")
+            if (ticker.Contains('.'))
             {
-                var result = await _eodhdClient.GetStockQuoteAsync(ticker, exchange, cancellationToken);
-                if (result.IsSuccess)
+                var parts = ticker.Split('.');
+                if (parts.Length == 2)
                 {
-                    var quote = MapToStockQuoteDto(result.Value);
-                    _logger.LogInformation("Successfully fetched quote for {Ticker}: ${Price}", ticker, quote.CurrentPrice);
-                    return Result.Success(quote);
+                    var tickerOnly = parts[0];
+                    var exchange = parts[1];
+                    _logger.LogDebug("Parsed full symbol {FullSymbol} -> ticker: {Ticker}, exchange: {Exchange}", ticker, tickerOnly, exchange);
+                    
+                    var result = await _eodhdClient.GetStockQuoteAsync(tickerOnly, exchange, cancellationToken);
+                    if (result.IsSuccess)
+                    {
+                        var quote = MapToStockQuoteDto(result.Value);
+                        _logger.LogInformation("Successfully fetched quote for {FullSymbol}: ${Price}", ticker, quote.CurrentPrice);
+                        return Result.Success(quote);
+                    }
+                    
+                    _logger.LogError("Failed to get quote for {FullSymbol}: {Error}", ticker, result.Error?.Message ?? "Unknown error");
+                    return Result.Failure<StockQuoteDto>(Error.ProviderUnavailable($"Failed to fetch quote for {ticker}: {result.Error?.Message ?? "Unknown error"}"));
                 }
-                
-                _logger.LogDebug("Failed to get quote for {Ticker} on {Exchange}: {Error}", ticker, exchange, result.Error?.Message ?? "Unknown error");
+                else
+                {
+                    _logger.LogError("Invalid ticker format: {Ticker}. Expected format: TICKER.EXCHANGE", ticker);
+                    return Result.Failure<StockQuoteDto>(Error.Validation($"Invalid ticker format: {ticker}. Expected format: TICKER.EXCHANGE"));
+                }
             }
-
-            // If no real data available, return mock data for development
-            _logger.LogWarning("No live data found for ticker: {Ticker}, returning mock data", ticker);
-            return Result.Success(CreateMockQuote(ticker));
+            else
+            {
+                _logger.LogError("No exchange specified for ticker: {Ticker}. Use format TICKER.EXCHANGE", ticker);
+                return Result.Failure<StockQuoteDto>(Error.Validation($"No exchange specified for ticker: {ticker}. Use format TICKER.EXCHANGE"));
+            }
         }
         catch (Exception ex)
         {
@@ -66,11 +79,8 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
                 return Result.Success(quote);
             }
 
-            _logger.LogWarning("Failed to get quote for {Ticker}.{Exchange}: {Error}", ticker, exchange, result.Error?.Message ?? "Unknown error");
-            
-            // If no real data available, return mock data for development
-            _logger.LogWarning("No live data found for {Ticker}.{Exchange}, returning mock data", ticker, exchange);
-            return Result.Success(CreateMockQuote(ticker));
+            _logger.LogError("Failed to get quote for {Ticker}.{Exchange}: {Error}", ticker, exchange, result.Error?.Message ?? "Unknown error");
+            return Result.Failure<StockQuoteDto>(Error.ProviderUnavailable($"Failed to fetch quote for {ticker}.{exchange}: {result.Error?.Message ?? "Unknown error"}"));
         }
         catch (Exception ex)
         {
@@ -90,25 +100,39 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
             _logger.LogInformation("Fetching historical prices for {Ticker} from {StartDate} to {EndDate}", 
                 ticker, startDate, endDate);
 
-            // For now, assume US stocks on NASDAQ or NYSE
-            var exchanges = new[] { "NASDAQ", "NYSE" };
-            
-            foreach (var exchange in exchanges)
+            // Check if ticker is in full symbol format (e.g., "0A00.LSE")
+            if (ticker.Contains('.'))
             {
-                var result = await _eodhdClient.GetHistoricalPricesAsync(ticker, exchange, startDate, endDate, cancellationToken);
-                if (result.IsSuccess)
+                var parts = ticker.Split('.');
+                if (parts.Length == 2)
                 {
-                    var historicalPrices = result.Value.Select(MapToHistoricalPriceDto).ToList();
-                    _logger.LogInformation("Successfully fetched {Count} historical prices for {Ticker}", 
-                        historicalPrices.Count, ticker);
-                    return Result.Success<IReadOnlyList<HistoricalPriceDto>>(historicalPrices);
+                    var tickerOnly = parts[0];
+                    var exchange = parts[1];
+                    _logger.LogDebug("Parsed full symbol {FullSymbol} -> ticker: {Ticker}, exchange: {Exchange}", ticker, tickerOnly, exchange);
+                    
+                    var result = await _eodhdClient.GetHistoricalPricesAsync(tickerOnly, exchange, startDate, endDate, cancellationToken);
+                    if (result.IsSuccess)
+                    {
+                        var historicalPrices = result.Value.Select(MapToHistoricalPriceDto).ToList();
+                        _logger.LogInformation("Successfully fetched {Count} historical prices for {FullSymbol}", 
+                            historicalPrices.Count, ticker);
+                        return Result.Success<IReadOnlyList<HistoricalPriceDto>>(historicalPrices);
+                    }
+                    
+                    _logger.LogError("Failed to get historical prices for {FullSymbol}: {Error}", ticker, result.Error?.Message ?? "Unknown error");
+                    return Result.Failure<IReadOnlyList<HistoricalPriceDto>>(Error.ProviderUnavailable($"Failed to fetch historical prices for {ticker}: {result.Error?.Message ?? "Unknown error"}"));
                 }
-                
-                _logger.LogDebug("Failed to get historical prices for {Ticker} on {Exchange}: {Error}", ticker, exchange, result.Error?.Message ?? "Unknown error");
+                else
+                {
+                    _logger.LogError("Invalid ticker format: {Ticker}. Expected format: TICKER.EXCHANGE", ticker);
+                    return Result.Failure<IReadOnlyList<HistoricalPriceDto>>(Error.Validation($"Invalid ticker format: {ticker}. Expected format: TICKER.EXCHANGE"));
+                }
             }
-
-            _logger.LogWarning("No historical data found for ticker: {Ticker}", ticker);
-            return Result.Failure<IReadOnlyList<HistoricalPriceDto>>(Error.NotFound("Historical data", ticker));
+            else
+            {
+                _logger.LogError("No exchange specified for ticker: {Ticker}. Use format TICKER.EXCHANGE", ticker);
+                return Result.Failure<IReadOnlyList<HistoricalPriceDto>>(Error.Validation($"No exchange specified for ticker: {ticker}. Use format TICKER.EXCHANGE"));
+            }
         }
         catch (Exception ex)
         {
@@ -124,25 +148,38 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
         {
             _logger.LogInformation("Fetching fundamentals for ticker: {Ticker}", ticker);
 
-            // Try different exchanges based on common patterns
-            var exchanges = GetLikelyExchanges(ticker);
-            
-            foreach (var exchange in exchanges)
+            // Check if ticker is in full symbol format (e.g., "0A00.LSE")
+            if (ticker.Contains('.'))
             {
-                var result = await _eodhdClient.GetFundamentalsAsync(ticker, exchange, cancellationToken);
-                if (result.IsSuccess)
+                var parts = ticker.Split('.');
+                if (parts.Length == 2)
                 {
-                    var fundamentals = MapToStockFundamentalsDto(result.Value);
-                    _logger.LogInformation("Successfully fetched fundamentals for {Ticker}", ticker);
-                    return Result.Success(fundamentals);
+                    var tickerOnly = parts[0];
+                    var exchange = parts[1];
+                    _logger.LogDebug("Parsed full symbol {FullSymbol} -> ticker: {Ticker}, exchange: {Exchange}", ticker, tickerOnly, exchange);
+                    
+                    var result = await _eodhdClient.GetFundamentalsAsync(tickerOnly, exchange, cancellationToken);
+                    if (result.IsSuccess)
+                    {
+                        var fundamentals = MapToStockFundamentalsDto(result.Value);
+                        _logger.LogInformation("Successfully fetched fundamentals for {FullSymbol}", ticker);
+                        return Result.Success(fundamentals);
+                    }
+                    
+                    _logger.LogError("Failed to get fundamentals for {FullSymbol}: {Error}", ticker, result.Error?.Message ?? "Unknown error");
+                    return Result.Failure<StockFundamentalsDto>(Error.ProviderUnavailable($"Failed to fetch fundamentals for {ticker}: {result.Error?.Message ?? "Unknown error"}"));
                 }
-                
-                _logger.LogDebug("Failed to get fundamentals for {Ticker} on {Exchange}: {Error}", ticker, exchange, result.Error?.Message ?? "Unknown error");
+                else
+                {
+                    _logger.LogError("Invalid ticker format: {Ticker}. Expected format: TICKER.EXCHANGE", ticker);
+                    return Result.Failure<StockFundamentalsDto>(Error.Validation($"Invalid ticker format: {ticker}. Expected format: TICKER.EXCHANGE"));
+                }
             }
-
-            // If no real data available, return mock data for development
-            _logger.LogWarning("No live fundamental data found for ticker: {Ticker}, returning mock data", ticker);
-            return Result.Success(CreateMockFundamentals(ticker));
+            else
+            {
+                _logger.LogError("No exchange specified for ticker: {Ticker}. Use format TICKER.EXCHANGE", ticker);
+                return Result.Failure<StockFundamentalsDto>(Error.Validation($"No exchange specified for ticker: {ticker}. Use format TICKER.EXCHANGE"));
+            }
         }
         catch (Exception ex)
         {
@@ -166,11 +203,8 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
                 return Result.Success(fundamentals);
             }
 
-            _logger.LogWarning("Failed to get fundamentals for {Ticker}.{Exchange}: {Error}", ticker, exchange, result.Error?.Message ?? "Unknown error");
-            
-            // If no real data available, return mock data for development
-            _logger.LogWarning("No live fundamental data found for {Ticker}.{Exchange}, returning mock data", ticker, exchange);
-            return Result.Success(CreateMockFundamentals(ticker));
+            _logger.LogError("Failed to get fundamentals for {Ticker}.{Exchange}: {Error}", ticker, exchange, result.Error?.Message ?? "Unknown error");
+            return Result.Failure<StockFundamentalsDto>(Error.ProviderUnavailable($"Failed to fetch fundamentals for {ticker}.{exchange}: {result.Error?.Message ?? "Unknown error"}"));
         }
         catch (Exception ex)
         {
@@ -186,6 +220,16 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
         {
             _logger.LogInformation("Fetching quotes for {Count} tickers", tickers.Count);
 
+            // Validate all tickers are in FullSymbol format before processing
+            foreach (var ticker in tickers)
+            {
+                if (!ticker.Contains('.'))
+                {
+                    _logger.LogError("Invalid ticker format: {Ticker}. Expected format: TICKER.EXCHANGE", ticker);
+                    return Result.Failure<IReadOnlyList<StockQuoteDto>>(Error.Validation($"Invalid ticker format: {ticker}. Expected format: TICKER.EXCHANGE"));
+                }
+            }
+
             var quotes = new List<StockQuoteDto>();
             var tasks = tickers.Select(async ticker =>
             {
@@ -194,13 +238,20 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
                 {
                     return result.Value;
                 }
+                _logger.LogError("Failed to fetch quote for {Ticker}: {Error}", ticker, result.Error?.Message ?? "Unknown error");
                 return null;
             });
 
             var results = await Task.WhenAll(tasks);
             var successfulQuotes = results.Where(q => q != null).Cast<StockQuoteDto>().ToList();
 
-            _logger.LogInformation("Successfully fetched quotes for {Count} tickers", successfulQuotes.Count);
+            if (successfulQuotes.Count == 0)
+            {
+                _logger.LogError("Failed to fetch quotes for any tickers");
+                return Result.Failure<IReadOnlyList<StockQuoteDto>>(Error.ProviderUnavailable("Failed to fetch quotes for any tickers"));
+            }
+
+            _logger.LogInformation("Successfully fetched quotes for {Count} of {Total} tickers", successfulQuotes.Count, tickers.Count);
             return Result.Success<IReadOnlyList<StockQuoteDto>>(successfulQuotes);
         }
         catch (Exception ex)
@@ -213,26 +264,18 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
 
     private static StockQuoteDto MapToStockQuoteDto(Volur.Application.DTOs.Provider.EodhdStockQuoteDto eodhdQuote)
     {
-        var change = eodhdQuote.Close.HasValue && eodhdQuote.PreviousClose.HasValue 
-            ? eodhdQuote.Close.Value - eodhdQuote.PreviousClose.Value 
-            : (double?)null;
-        
-        var changePercent = change.HasValue && eodhdQuote.PreviousClose.HasValue && eodhdQuote.PreviousClose.Value != 0
-            ? (change.Value / eodhdQuote.PreviousClose.Value) * 100
-            : (double?)null;
-
         return new StockQuoteDto(
             Ticker: eodhdQuote.Code,
             CurrentPrice: eodhdQuote.Close,
             PreviousClose: eodhdQuote.PreviousClose,
-            Change: change,
-            ChangePercent: changePercent,
+            Change: eodhdQuote.Change,
+            ChangePercent: eodhdQuote.ChangeP,
             Open: eodhdQuote.Open,
             High: eodhdQuote.High,
             Low: eodhdQuote.Low,
             Volume: eodhdQuote.Volume,
             AverageVolume: null, // EODHD doesn't provide average volume in real-time
-            LastUpdated: eodhdQuote.Timestamp ?? DateTime.UtcNow
+            LastUpdated: DateTimeOffset.FromUnixTimeSeconds(eodhdQuote.Timestamp).UtcDateTime
         );
     }
 
@@ -253,8 +296,8 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
         return new StockFundamentalsDto(
             Ticker: eodhdFundamentals.Code,
             CompanyName: eodhdFundamentals.Name ?? eodhdFundamentals.General?.Name,
-            Sector: eodhdFundamentals.Sector ?? eodhdFundamentals.General?.Sector,
-            Industry: eodhdFundamentals.Industry ?? eodhdFundamentals.General?.Industry,
+            Sector: eodhdFundamentals.General?.GicSector ?? eodhdFundamentals.Sector,
+            Industry: eodhdFundamentals.General?.GicIndustry ?? eodhdFundamentals.Industry,
             Description: eodhdFundamentals.Description ?? eodhdFundamentals.General?.Description,
             Website: eodhdFundamentals.Website ?? eodhdFundamentals.General?.WebUrl,
             LogoUrl: eodhdFundamentals.LogoUrl ?? eodhdFundamentals.General?.LogoUrl,
@@ -355,6 +398,11 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
             "AAPL" => ("Apple Inc.", "Technology", "Consumer Electronics", 2_800_000_000_000.0),
             "MSFT" => ("Microsoft Corporation", "Technology", "Software", 2_400_000_000_000.0),
             "GOOGL" => ("Alphabet Inc.", "Technology", "Internet Content & Information", 1_700_000_000_000.0),
+            "0A00" => ("Akzo Nobel N.V.", "Materials", "Specialty Chemicals", 83_400_000_000.0),
+            "0A05" => ("Medacta Group S.A.", "Healthcare", "Medical Devices", 90_100_000_000.0),
+            "0A0C" => ("Stadler Rail AG", "Industrials", "Rail Equipment", 37_900_000_000.0),
+            "0A0D" => ("Alcon Inc.", "Healthcare", "Medical Equipment", 46_700_000_000.0),
+            "0A0F" => ("Citycon Oyj", "Real Estate", "REITs", 1_200_000_000.0),
             _ => ($"{ticker} Corporation", "Technology", "Software", random.NextDouble() * 100_000_000_000)
         };
 

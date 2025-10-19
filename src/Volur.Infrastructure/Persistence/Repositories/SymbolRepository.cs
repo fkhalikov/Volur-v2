@@ -179,5 +179,48 @@ public sealed class SymbolRepository : ISymbolRepository
             return null;
         }
     }
+
+    public async Task<(IReadOnlyList<Symbol> symbols, int totalCount, DateTime? fetchedAt)?> GetAllByExchangeAsync(
+        string exchangeCode, 
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var filter = Builders<SymbolDocument>.Filter.Eq(x => x.ParentExchange, exchangeCode);
+            
+            // Get total count
+            var totalCount = await _context.Symbols.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
+            
+            if (totalCount == 0)
+            {
+                _logger.LogDebug("No symbols found for exchange: {ExchangeCode}", exchangeCode);
+                return null;
+            }
+
+            // Get all documents without pagination
+            var documents = await _context.Symbols
+                .Find(filter)
+                .SortBy(x => x.Ticker)
+                .ToListAsync(cancellationToken);
+
+            if (!documents.Any())
+            {
+                _logger.LogDebug("No symbols found for exchange: {ExchangeCode}", exchangeCode);
+                return null;
+            }
+
+            var symbols = documents.Select(d => d.ToDomain()).ToList();
+            var fetchedAt = documents.FirstOrDefault()?.FetchedAt;
+
+            _logger.LogDebug("Retrieved {Count} symbols for exchange: {ExchangeCode}", symbols.Count, exchangeCode);
+            
+            return (symbols, (int)totalCount, fetchedAt);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get all symbols for exchange: {ExchangeCode}", exchangeCode);
+            return null;
+        }
+    }
 }
 

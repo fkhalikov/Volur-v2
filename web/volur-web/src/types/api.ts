@@ -23,6 +23,8 @@ export interface SymbolDto {
   dividendYield?: number
   currentPrice?: number
   changePercent?: number
+  sector?: string
+  industry?: string
   fundamentalsFetchedAt?: string
 }
 
@@ -116,6 +118,18 @@ export interface StockDetailsResponse {
   quoteFetchedAt?: string
   fundamentalsFetchedAt?: string
   requestedAt: string
+}
+
+export interface BulkFetchFundamentalsResponse {
+  exchangeCode: string
+  totalSymbols: number
+  symbolsWithoutData: number
+  processedSymbols: number
+  successfulFetches: number
+  failedFetches: number
+  batchesProcessed: number
+  startedAt: string
+  completedAt: string
 }
 
 export interface ErrorResponse {

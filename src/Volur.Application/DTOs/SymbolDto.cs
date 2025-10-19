@@ -18,6 +18,8 @@ public sealed record SymbolDto(
     double? DividendYield = null,
     double? CurrentPrice = null,
     double? ChangePercent = null,
+    string? Sector = null,
+    string? Industry = null,
     DateTime? FundamentalsFetchedAt = null
 );
 

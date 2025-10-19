@@ -1,4 +1,4 @@
-import { ExchangesResponse, SymbolsResponse, StockDetailsResponse } from '../types/api'
+import { ExchangesResponse, SymbolsResponse, StockDetailsResponse, BulkFetchFundamentalsResponse } from '../types/api'
 
 const API_BASE_URL = '/api'
 
@@ -85,6 +85,23 @@ export const api = {
     }
     const response = await fetch(url.toString())
     return handleResponse<StockDetailsResponse>(response)
+  },
+
+  async bulkFetchFundamentals(
+    exchangeCode: string,
+    batchSize = 3000
+  ): Promise<BulkFetchFundamentalsResponse> {
+    const url = new URL(
+      `${API_BASE_URL}/exchanges/${exchangeCode}/symbols/bulk-fetch-fundamentals`,
+      window.location.origin
+    )
+    if (batchSize !== 3000) {
+      url.searchParams.set('batchSize', batchSize.toString())
+    }
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+    })
+    return handleResponse<BulkFetchFundamentalsResponse>(response)
   },
 }
 

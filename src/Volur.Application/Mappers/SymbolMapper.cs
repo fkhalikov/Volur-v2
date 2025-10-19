@@ -43,6 +43,8 @@ public static class SymbolMapper
         DividendYield: fundamentals?.DividendYield,
         CurrentPrice: quote?.CurrentPrice,
         ChangePercent: quote?.ChangePercent,
+        Sector: fundamentals?.Sector,
+        Industry: fundamentals?.Industry,
         FundamentalsFetchedAt: fundamentalsFetchedAt
     );
 }

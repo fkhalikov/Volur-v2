@@ -132,9 +132,9 @@ public sealed class GetStockDetailsHandler
             }
         }
 
-        // Fetch from provider using specific exchange
-        _logger.LogDebug("Fetching quote from provider for {Ticker}.{Exchange}", ticker, symbol.ExchangeCode);
-        var providerResult = await _stockDataProvider.GetQuoteAsync(ticker, symbol.ExchangeCode, cancellationToken);
+        // Fetch from provider using full symbol
+        _logger.LogDebug("Fetching quote from provider for {FullSymbol}", symbol.FullSymbol);
+        var providerResult = await _stockDataProvider.GetQuoteAsync(symbol.FullSymbol, cancellationToken);
         
         if (providerResult.IsFailure)
         {
@@ -177,9 +177,9 @@ public sealed class GetStockDetailsHandler
             }
         }
 
-        // Fetch from provider using specific exchange
-        _logger.LogDebug("Fetching fundamentals from provider for {Ticker}.{Exchange}", ticker, symbol.ExchangeCode);
-        var providerResult = await _stockDataProvider.GetFundamentalsAsync(ticker, symbol.ExchangeCode, cancellationToken);
+        // Fetch from provider using full symbol
+        _logger.LogDebug("Fetching fundamentals from provider for {FullSymbol}", symbol.FullSymbol);
+        var providerResult = await _stockDataProvider.GetFundamentalsAsync(symbol.FullSymbol, cancellationToken);
         
         if (providerResult.IsFailure)
         {

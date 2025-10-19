@@ -309,15 +309,21 @@ export default function SymbolsPage() {
                   <th className="px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">
                     P/E Ratio
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Div Yield
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Status
-                  </th>
+           <th className="px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">
+             Div Yield
+           </th>
+           <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+             Sector
+           </th>
+           <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+             Industry
+           </th>
+           <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+             Type
+           </th>
+           <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+             Status
+           </th>
                 </tr>
               </thead>
               <tbody className="bg-slate-800 divide-y divide-slate-700">
@@ -366,25 +372,31 @@ export default function SymbolsPage() {
                         {formatRatio(symbol.trailingPE)}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm text-slate-300 font-mono">
-                        {formatPercentage(symbol.dividendYield ? symbol.dividendYield * 100 : undefined)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-slate-300">{symbol.type || '-'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          symbol.isActive
-                            ? 'bg-green-600 text-white'
-                            : 'bg-slate-600 text-slate-300'
-                        }`}
-                      >
-                        {symbol.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
+             <td className="px-6 py-4 whitespace-nowrap text-right">
+               <div className="text-sm text-slate-300 font-mono">
+                 {formatPercentage(symbol.dividendYield ? symbol.dividendYield * 100 : undefined)}
+               </div>
+             </td>
+             <td className="px-6 py-4 whitespace-nowrap">
+               <div className="text-sm text-slate-300">{symbol.sector || '-'}</div>
+             </td>
+             <td className="px-6 py-4 whitespace-nowrap">
+               <div className="text-sm text-slate-300">{symbol.industry || '-'}</div>
+             </td>
+             <td className="px-6 py-4 whitespace-nowrap">
+               <div className="text-sm text-slate-300">{symbol.type || '-'}</div>
+             </td>
+             <td className="px-6 py-4 whitespace-nowrap">
+               <span
+                 className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                   symbol.isActive
+                     ? 'bg-green-600 text-white'
+                     : 'bg-slate-600 text-slate-300'
+                 }`}
+               >
+                 {symbol.isActive ? 'Active' : 'Inactive'}
+               </span>
+             </td>
                   </tr>
                 ))}
               </tbody>

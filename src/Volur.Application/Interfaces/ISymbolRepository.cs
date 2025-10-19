@@ -32,5 +32,10 @@ public interface ISymbolRepository
     /// Gets a symbol by ticker (searches across all exchanges).
     /// </summary>
     Task<Symbol?> GetByTickerAsync(string ticker, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets all symbols for an exchange without pagination.
+    /// </summary>
+    Task<(IReadOnlyList<Symbol> symbols, int totalCount, DateTime? fetchedAt)?> GetAllByExchangeAsync(string exchangeCode, CancellationToken cancellationToken = default);
 }
 
