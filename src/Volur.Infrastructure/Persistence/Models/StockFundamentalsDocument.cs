@@ -33,6 +33,15 @@ public sealed class StockFundamentalsDocument
     [BsonElement("logoUrl")]
     public string? LogoUrl { get; set; }
 
+    [BsonElement("currencyCode")]
+    public string? CurrencyCode { get; set; }
+
+    [BsonElement("currencySymbol")]
+    public string? CurrencySymbol { get; set; }
+
+    [BsonElement("currencyName")]
+    public string? CurrencyName { get; set; }
+
     [BsonElement("marketCap")]
     public double? MarketCap { get; set; }
 

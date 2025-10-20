@@ -19,8 +19,28 @@ export default function StockDetailsModal({
   isLoading,
   error
 }: StockDetailsModalProps) {
-  const formatCurrency = (value?: number) => {
+  const formatCurrency = (value?: number, currencyCode?: string, currencySymbol?: string) => {
     if (value === undefined || value === null) return 'N/A'
+    
+    // If we have a currency symbol, use it for display
+    if (currencySymbol) {
+      return `${currencySymbol}${new Intl.NumberFormat('en-US').format(value)}`
+    }
+    
+    // Fall back to currency code if available
+    if (currencyCode) {
+      try {
+        return new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: currencyCode
+        }).format(value)
+      } catch {
+        // If currency code is invalid, fall back to symbol prefix
+        return `${currencyCode} ${new Intl.NumberFormat('en-US').format(value)}`
+      }
+    }
+    
+    // Default to USD if no currency info available
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
@@ -151,11 +171,11 @@ export default function StockDetailsModal({
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           <div>
                             <span className="text-slate-400">Current Price:</span>
-                            <p className="text-white font-bold text-lg">{formatCurrency(stockDetails.quote.currentPrice)}</p>
+                            <p className="text-white font-bold text-lg">{formatCurrency(stockDetails.quote.currentPrice, stockDetails.symbol.currency, stockDetails.fundamentals?.currencySymbol)}</p>
                           </div>
                           <div>
                             <span className="text-slate-400">Previous Close:</span>
-                            <p className="text-white">{formatCurrency(stockDetails.quote.previousClose)}</p>
+                            <p className="text-white">{formatCurrency(stockDetails.quote.previousClose, stockDetails.symbol.currency, stockDetails.fundamentals?.currencySymbol)}</p>
                           </div>
                           <div>
                             <span className="text-slate-400">Change:</span>
@@ -177,15 +197,15 @@ export default function StockDetailsModal({
                           </div>
                           <div>
                             <span className="text-slate-400">Open:</span>
-                            <p className="text-white">{formatCurrency(stockDetails.quote.open)}</p>
+                            <p className="text-white">{formatCurrency(stockDetails.quote.open, stockDetails.symbol.currency, stockDetails.fundamentals?.currencySymbol)}</p>
                           </div>
                           <div>
                             <span className="text-slate-400">High:</span>
-                            <p className="text-white">{formatCurrency(stockDetails.quote.high)}</p>
+                            <p className="text-white">{formatCurrency(stockDetails.quote.high, stockDetails.symbol.currency, stockDetails.fundamentals?.currencySymbol)}</p>
                           </div>
                           <div>
                             <span className="text-slate-400">Low:</span>
-                            <p className="text-white">{formatCurrency(stockDetails.quote.low)}</p>
+                            <p className="text-white">{formatCurrency(stockDetails.quote.low, stockDetails.symbol.currency, stockDetails.fundamentals?.currencySymbol)}</p>
                           </div>
                           <div>
                             <span className="text-slate-400">Volume:</span>
@@ -237,7 +257,7 @@ export default function StockDetailsModal({
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               <div>
                                 <span className="text-slate-400">Market Cap:</span>
-                                <p className="text-white">{formatCurrency(stockDetails.fundamentals.marketCap)}</p>
+                                <p className="text-white">{formatCurrency(stockDetails.fundamentals.marketCap, stockDetails.fundamentals.currencyCode, stockDetails.fundamentals.currencySymbol)}</p>
                               </div>
                               <div>
                                 <span className="text-slate-400">P/E Ratio:</span>
@@ -253,15 +273,15 @@ export default function StockDetailsModal({
                               </div>
                               <div>
                                 <span className="text-slate-400">52W Low:</span>
-                                <p className="text-white">{formatCurrency(stockDetails.fundamentals.fiftyTwoWeekLow)}</p>
+                                <p className="text-white">{formatCurrency(stockDetails.fundamentals.fiftyTwoWeekLow, stockDetails.fundamentals.currencyCode, stockDetails.fundamentals.currencySymbol)}</p>
                               </div>
                               <div>
                                 <span className="text-slate-400">52W High:</span>
-                                <p className="text-white">{formatCurrency(stockDetails.fundamentals.fiftyTwoWeekHigh)}</p>
+                                <p className="text-white">{formatCurrency(stockDetails.fundamentals.fiftyTwoWeekHigh, stockDetails.fundamentals.currencyCode, stockDetails.fundamentals.currencySymbol)}</p>
                               </div>
                               <div>
                                 <span className="text-slate-400">Revenue:</span>
-                                <p className="text-white">{formatCurrency(stockDetails.fundamentals.revenue)}</p>
+                                <p className="text-white">{formatCurrency(stockDetails.fundamentals.revenue, stockDetails.fundamentals.currencyCode, stockDetails.fundamentals.currencySymbol)}</p>
                               </div>
                               <div>
                                 <span className="text-slate-400">Debt/Equity:</span>

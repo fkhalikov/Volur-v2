@@ -77,6 +77,9 @@ export interface StockFundamentalsDto {
   description?: string
   website?: string
   logoUrl?: string
+  currencyCode?: string
+  currencySymbol?: string
+  currencyName?: string
   marketCap?: number
   enterpriseValue?: number
   trailingPE?: number
