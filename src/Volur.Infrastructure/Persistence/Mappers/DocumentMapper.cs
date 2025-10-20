@@ -116,6 +116,7 @@ public static class DocumentMapper
             CurrencyCode = dto.CurrencyCode,
             CurrencySymbol = dto.CurrencySymbol,
             CurrencyName = dto.CurrencyName,
+            // Note: Highlights are stored as individual fields, not as a separate nested object
             MarketCap = dto.MarketCap,
             EnterpriseValue = dto.EnterpriseValue,
             TrailingPE = dto.TrailingPE,
@@ -165,6 +166,12 @@ public static class DocumentMapper
             CurrencyCode: doc.CurrencyCode,
             CurrencySymbol: doc.CurrencySymbol,
             CurrencyName: doc.CurrencyName,
+            Highlights: null, // Not stored separately in document - individual fields are used instead
+            Valuation: null, // Not stored separately in document - individual fields are used instead
+            Technicals: null, // Not stored separately in document - individual fields are used instead
+            SplitsDividends: null, // Not stored separately in document - individual fields are used instead
+            Earnings: null, // Not stored separately in document - individual fields are used instead
+            Financials: null, // Not stored separately in document - individual fields are used instead
             MarketCap: doc.MarketCap,
             EnterpriseValue: doc.EnterpriseValue,
             TrailingPE: doc.TrailingPE,

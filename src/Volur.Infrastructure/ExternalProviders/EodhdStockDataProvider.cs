@@ -33,9 +33,10 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
                 {
                     var tickerOnly = parts[0];
                     var exchange = parts[1];
-                    _logger.LogDebug("Parsed full symbol {FullSymbol} -> ticker: {Ticker}, exchange: {Exchange}", ticker, tickerOnly, exchange);
+                    var normalizedExchange = NormalizeExchangeForEodhd(exchange);
+                    _logger.LogDebug("Parsed full symbol {FullSymbol} -> ticker: {Ticker}, exchange: {Exchange} -> normalized: {NormalizedExchange}", ticker, tickerOnly, exchange, normalizedExchange);
                     
-                    var result = await _eodhdClient.GetStockQuoteAsync(tickerOnly, exchange, cancellationToken);
+                    var result = await _eodhdClient.GetStockQuoteAsync(tickerOnly, normalizedExchange, cancellationToken);
                     if (result.IsSuccess)
                     {
                         var quote = MapToStockQuoteDto(result.Value);
@@ -69,9 +70,10 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
     {
         try
         {
-            _logger.LogInformation("Fetching quote for ticker: {Ticker} on exchange: {Exchange}", ticker, exchange);
+            var normalizedExchange = NormalizeExchangeForEodhd(exchange);
+            _logger.LogInformation("Fetching quote for ticker: {Ticker} on exchange: {Exchange} -> normalized: {NormalizedExchange}", ticker, exchange, normalizedExchange);
 
-            var result = await _eodhdClient.GetStockQuoteAsync(ticker, exchange, cancellationToken);
+            var result = await _eodhdClient.GetStockQuoteAsync(ticker, normalizedExchange, cancellationToken);
             if (result.IsSuccess)
             {
                 var quote = MapToStockQuoteDto(result.Value);
@@ -108,9 +110,10 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
                 {
                     var tickerOnly = parts[0];
                     var exchange = parts[1];
-                    _logger.LogDebug("Parsed full symbol {FullSymbol} -> ticker: {Ticker}, exchange: {Exchange}", ticker, tickerOnly, exchange);
+                    var normalizedExchange = NormalizeExchangeForEodhd(exchange);
+                    _logger.LogDebug("Parsed full symbol {FullSymbol} -> ticker: {Ticker}, exchange: {Exchange} -> normalized: {NormalizedExchange}", ticker, tickerOnly, exchange, normalizedExchange);
                     
-                    var result = await _eodhdClient.GetHistoricalPricesAsync(tickerOnly, exchange, startDate, endDate, cancellationToken);
+                    var result = await _eodhdClient.GetHistoricalPricesAsync(tickerOnly, normalizedExchange, startDate, endDate, cancellationToken);
                     if (result.IsSuccess)
                     {
                         var historicalPrices = result.Value.Select(MapToHistoricalPriceDto).ToList();
@@ -156,9 +159,10 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
                 {
                     var tickerOnly = parts[0];
                     var exchange = parts[1];
-                    _logger.LogDebug("Parsed full symbol {FullSymbol} -> ticker: {Ticker}, exchange: {Exchange}", ticker, tickerOnly, exchange);
+                    var normalizedExchange = NormalizeExchangeForEodhd(exchange);
+                    _logger.LogDebug("Parsed full symbol {FullSymbol} -> ticker: {Ticker}, exchange: {Exchange} -> normalized: {NormalizedExchange}", ticker, tickerOnly, exchange, normalizedExchange);
                     
-                    var result = await _eodhdClient.GetFundamentalsAsync(tickerOnly, exchange, cancellationToken);
+                    var result = await _eodhdClient.GetFundamentalsAsync(tickerOnly, normalizedExchange, cancellationToken);
                     if (result.IsSuccess)
                     {
                         var fundamentals = MapToStockFundamentalsDto(result.Value);
@@ -193,9 +197,10 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
     {
         try
         {
-            _logger.LogInformation("Fetching fundamentals for ticker: {Ticker} on exchange: {Exchange}", ticker, exchange);
+            var normalizedExchange = NormalizeExchangeForEodhd(exchange);
+            _logger.LogInformation("Fetching fundamentals for ticker: {Ticker} on exchange: {Exchange} -> normalized: {NormalizedExchange}", ticker, exchange, normalizedExchange);
 
-            var result = await _eodhdClient.GetFundamentalsAsync(ticker, exchange, cancellationToken);
+            var result = await _eodhdClient.GetFundamentalsAsync(ticker, normalizedExchange, cancellationToken);
             if (result.IsSuccess)
             {
                 var fundamentals = MapToStockFundamentalsDto(result.Value);
@@ -304,6 +309,59 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
             CurrencyCode: eodhdFundamentals.General.CurrencyCode,
             CurrencySymbol: eodhdFundamentals.General.CurrencySymbol,
             CurrencyName: eodhdFundamentals.General.CurrencyName,
+            Highlights: new StockHighlightsDto(
+                MarketCapitalization: eodhdFundamentals.Highlights.MarketCapitalization,
+                MarketCapitalizationMln: eodhdFundamentals.Highlights.MarketCapitalizationMln,
+                Ebitda: eodhdFundamentals.Highlights.Ebitda,
+                PeRatio: eodhdFundamentals.Highlights.PeRatio,
+                PegRatio: eodhdFundamentals.Highlights.PegRatio,
+                WallStreetTargetPrice: eodhdFundamentals.Highlights.WallStreetTargetPrice,
+                BookValue: eodhdFundamentals.Highlights.BookValue,
+                DividendShare: eodhdFundamentals.Highlights.DividendShare,
+                DividendYield: eodhdFundamentals.Highlights.DividendYield,
+                EarningsShare: eodhdFundamentals.Highlights.EarningsShare,
+                EpsEstimateCurrentYear: eodhdFundamentals.Highlights.EpsEstimateCurrentYear,
+                EpsEstimateNextYear: eodhdFundamentals.Highlights.EpsEstimateNextYear,
+                EpsEstimateNextQuarter: eodhdFundamentals.Highlights.EpsEstimateNextQuarter,
+                EpsEstimateCurrentQuarter: eodhdFundamentals.Highlights.EpsEstimateCurrentQuarter,
+                MostRecentQuarter: eodhdFundamentals.Highlights.MostRecentQuarter,
+                ProfitMargin: eodhdFundamentals.Highlights.ProfitMargin,
+                OperatingMarginTtm: eodhdFundamentals.Highlights.OperatingMarginTtm,
+                ReturnOnAssetsTtm: eodhdFundamentals.Highlights.ReturnOnAssetsTtm,
+                ReturnOnEquityTtm: eodhdFundamentals.Highlights.ReturnOnEquityTtm,
+                RevenueTtm: eodhdFundamentals.Highlights.RevenueTtm,
+                RevenuePerShareTtm: eodhdFundamentals.Highlights.RevenuePerShareTtm,
+                QuarterlyRevenueGrowthYoy: eodhdFundamentals.Highlights.QuarterlyRevenueGrowthYoy,
+                GrossProfitTtm: eodhdFundamentals.Highlights.GrossProfitTtm,
+                DilutedEpsTtm: eodhdFundamentals.Highlights.DilutedEpsTtm,
+                QuarterlyEarningsGrowthYoy: eodhdFundamentals.Highlights.QuarterlyEarningsGrowthYoy
+            ),
+            Valuation: new StockValuationDto(
+                TrailingPe: eodhdFundamentals.Valuation.TrailingPe,
+                ForwardPe: eodhdFundamentals.Valuation.ForwardPe,
+                PriceSalesTtm: eodhdFundamentals.Valuation.PriceSalesTtm,
+                PriceBookMrq: eodhdFundamentals.Valuation.PriceBookMrq,
+                EnterpriseValue: eodhdFundamentals.Valuation.EnterpriseValue,
+                EnterpriseValueRevenue: eodhdFundamentals.Valuation.EnterpriseValueRevenue,
+                EnterpriseValueEbitda: eodhdFundamentals.Valuation.EnterpriseValueEbitda
+            ),
+            Technicals: new StockTechnicalsDto(
+                Beta: eodhdFundamentals.Technicals.Beta,
+                FiftyTwoWeekHigh: eodhdFundamentals.Technicals.FiftyTwoWeekHigh,
+                FiftyTwoWeekLow: eodhdFundamentals.Technicals.FiftyTwoWeekLow,
+                FiftyDayMa: eodhdFundamentals.Technicals.FiftyDayMa,
+                TwoHundredDayMa: eodhdFundamentals.Technicals.TwoHundredDayMa
+            ),
+            SplitsDividends: new StockSplitsDividendsDto(
+                PayoutRatio: eodhdFundamentals.SplitsDividends.PayoutRatio,
+                DividendDate: null, // Parse from DividendDate string if needed
+                ExDividendDate: null, // Parse from ExDividendDate string if needed  
+                DividendPerShare: eodhdFundamentals.SplitsDividends.ForwardAnnualDividendRate,
+                DividendYield: eodhdFundamentals.SplitsDividends.ForwardAnnualDividendYield,
+                NumberDividendsByYear: null // Not available in EODHD structure
+            ),
+            Earnings: null, // We'll implement this mapping in a follow-up
+            Financials: null, // We'll implement this mapping in a follow-up
             MarketCap: eodhdFundamentals.Highlights.MarketCapitalization,
             EnterpriseValue: eodhdFundamentals.Valuation.EnterpriseValue,
             TrailingPE: eodhdFundamentals.Valuation.TrailingPe,
@@ -420,6 +478,59 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
             CurrencyCode: "USD",
             CurrencySymbol: "$",
             CurrencyName: "US Dollar",
+            Highlights: new StockHighlightsDto(
+                MarketCapitalization: (long?)marketCap,
+                MarketCapitalizationMln: marketCap / 1_000_000,
+                Ebitda: (long?)(marketCap * 0.15),
+                PeRatio: 15.0 + random.NextDouble() * 20,
+                PegRatio: 1.0 + random.NextDouble() * 2,
+                WallStreetTargetPrice: null,
+                BookValue: 10.0 + random.NextDouble() * 50,
+                DividendShare: 1.0 + random.NextDouble() * 5,
+                DividendYield: 0.01 + random.NextDouble() * 0.05,
+                EarningsShare: 5.0 + random.NextDouble() * 15,
+                EpsEstimateCurrentYear: 5.5 + random.NextDouble() * 15,
+                EpsEstimateNextYear: 6.0 + random.NextDouble() * 16,
+                EpsEstimateNextQuarter: 1.3 + random.NextDouble() * 4,
+                EpsEstimateCurrentQuarter: 1.2 + random.NextDouble() * 4,
+                MostRecentQuarter: "2024-09-30",
+                ProfitMargin: 0.05 + random.NextDouble() * 0.25,
+                OperatingMarginTtm: 0.08 + random.NextDouble() * 0.20,
+                ReturnOnAssetsTtm: 0.03 + random.NextDouble() * 0.15,
+                ReturnOnEquityTtm: 0.08 + random.NextDouble() * 0.25,
+                RevenueTtm: (long?)(marketCap * 2),
+                RevenuePerShareTtm: 50.0 + random.NextDouble() * 200,
+                QuarterlyRevenueGrowthYoy: -0.05 + random.NextDouble() * 0.20,
+                GrossProfitTtm: (long?)(marketCap * 0.8),
+                DilutedEpsTtm: 5.0 + random.NextDouble() * 15,
+                QuarterlyEarningsGrowthYoy: -0.10 + random.NextDouble() * 0.30
+            ),
+            Valuation: new StockValuationDto(
+                TrailingPe: 15.0 + random.NextDouble() * 20,
+                ForwardPe: 12.0 + random.NextDouble() * 18,
+                PriceSalesTtm: 1.0 + random.NextDouble() * 5,
+                PriceBookMrq: 1.0 + random.NextDouble() * 4,
+                EnterpriseValue: (long?)(marketCap * 1.1),
+                EnterpriseValueRevenue: 2.0 + random.NextDouble() * 8,
+                EnterpriseValueEbitda: 8.0 + random.NextDouble() * 15
+            ),
+            Technicals: new StockTechnicalsDto(
+                Beta: 0.5 + random.NextDouble() * 2,
+                FiftyTwoWeekHigh: 100.0 + random.NextDouble() * 200,
+                FiftyTwoWeekLow: 50.0 + random.NextDouble() * 100,
+                FiftyDayMa: 80.0 + random.NextDouble() * 120,
+                TwoHundredDayMa: 70.0 + random.NextDouble() * 130
+            ),
+            SplitsDividends: new StockSplitsDividendsDto(
+                PayoutRatio: 0.20 + random.NextDouble() * 0.60,
+                DividendDate: null,
+                ExDividendDate: null,
+                DividendPerShare: 1.0 + random.NextDouble() * 5,
+                DividendYield: 0.01 + random.NextDouble() * 0.05,
+                NumberDividendsByYear: 4
+            ),
+            Earnings: null, // Complex structure - will implement later
+            Financials: null, // Complex structure - will implement later
             MarketCap: marketCap,
             EnterpriseValue: marketCap * 1.1,
             TrailingPE: 15.0 + random.NextDouble() * 20, // PE between 15-35
@@ -453,5 +564,21 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
             FiftyTwoWeekHigh: 150.0 + random.NextDouble() * 200,
             LastUpdated: DateTime.UtcNow
         );
+    }
+
+    /// <summary>
+    /// Normalizes exchange codes to EODHD's expected format.
+    /// For US stocks, EODHD expects "US" rather than specific exchanges like NYSE, NASDAQ.
+    /// </summary>
+    private static string NormalizeExchangeForEodhd(string exchange)
+    {
+        return exchange.ToUpperInvariant() switch
+        {
+            // US Exchanges - all map to "US"
+            "NYSE" or "NASDAQ" or "AMEX" or "BATS" or "ARCA" or "OTC" or "OTCBB" or "PINK" => "US",
+            
+            // Keep other exchanges as-is (LSE, TSE, etc.)
+            _ => exchange
+        };
     }
 }
