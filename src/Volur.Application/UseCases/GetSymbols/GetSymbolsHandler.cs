@@ -19,6 +19,7 @@ public sealed class GetSymbolsHandler
     private readonly ISymbolRepository _symbolRepository;
     private readonly IExchangeRepository _exchangeRepository;
     private readonly IStockDataRepository _stockDataRepository;
+    private readonly IStockDataProvider _stockDataProvider;
     private readonly IEodhdClient _eodhdClient;
     private readonly ILogger<GetSymbolsHandler> _logger;
     private readonly CacheTtlOptions _cacheTtl;
@@ -27,6 +28,7 @@ public sealed class GetSymbolsHandler
         ISymbolRepository symbolRepository,
         IExchangeRepository exchangeRepository,
         IStockDataRepository stockDataRepository,
+        IStockDataProvider stockDataProvider,
         IEodhdClient eodhdClient,
         ILogger<GetSymbolsHandler> logger,
         IOptions<CacheTtlOptions> cacheTtl)
@@ -34,6 +36,7 @@ public sealed class GetSymbolsHandler
         _symbolRepository = symbolRepository;
         _exchangeRepository = exchangeRepository;
         _stockDataRepository = stockDataRepository;
+        _stockDataProvider = stockDataProvider;
         _eodhdClient = eodhdClient;
         _logger = logger;
         _cacheTtl = cacheTtl.Value;
@@ -202,7 +205,7 @@ public sealed class GetSymbolsHandler
         {
             try
             {
-                _logger.LogDebug("Fetching fundamental data for symbol {Ticker}", symbol.Ticker);
+                _logger.LogDebug("Fetching quote and fundamental data for symbol {Ticker}", symbol.Ticker);
                 
                 // Fetch cached quote and fundamentals data in parallel
                 var quoteTask = _stockDataRepository.GetQuoteAsync(symbol.Ticker, cancellationToken);
@@ -212,6 +215,42 @@ public sealed class GetSymbolsHandler
 
                 var quoteResult = await quoteTask;
                 var fundamentalsResult = await fundamentalsTask;
+
+                // If no cached quote data exists, try to fetch fresh data from provider
+                if (quoteResult?.quote == null)
+                {
+                    try
+                    {
+                        _logger.LogDebug("No cached quote for {Ticker}, fetching from provider", symbol.Ticker);
+                        var freshQuoteResult = await _stockDataProvider.GetQuoteAsync(symbol.FullSymbol, cancellationToken);
+                        
+                        if (freshQuoteResult.IsSuccess)
+                        {
+                            var freshQuote = freshQuoteResult.Value;
+                            
+                            // Cache the fresh quote data for future requests
+                            try
+                            {
+                                await _stockDataRepository.UpsertQuoteAsync(freshQuote, cancellationToken);
+                                _logger.LogDebug("Cached fresh quote for {Ticker}", symbol.Ticker);
+                            }
+                            catch (Exception cacheEx)
+                            {
+                                _logger.LogWarning(cacheEx, "Failed to cache quote for {Ticker}, continuing with fresh data", symbol.Ticker);
+                            }
+
+                            quoteResult = (freshQuote, DateTime.UtcNow);
+                        }
+                        else
+                        {
+                            _logger.LogDebug("Failed to fetch fresh quote for {Ticker}: {Error}", symbol.Ticker, freshQuoteResult.Error?.Message);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error fetching fresh quote for {Ticker}", symbol.Ticker);
+                    }
+                }
 
                 _logger.LogDebug("Symbol {Ticker}: Quote={HasQuote}, Fundamentals={HasFundamentals}", 
                     symbol.Ticker, quoteResult?.quote != null, fundamentalsResult?.fundamentals != null);
