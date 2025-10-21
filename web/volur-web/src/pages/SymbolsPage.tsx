@@ -165,24 +165,30 @@ export default function SymbolsPage() {
     }
   }
 
-  const handleRefreshFundamentals = async () => {
+  const handleBulkFetchFundamentals = async () => {
     if (!code) return
     setIsRefreshingFundamentals(true)
     try {
-      // Force refresh symbols with fundamentals data
-      await api.getSymbols(code, {
-        page,
-        pageSize,
-        q: debouncedSearch || undefined,
-        forceRefresh: true
-      })
+      console.log('Starting bulk fetch of fundamentals for 3000 symbols...')
+      const result = await api.bulkFetchFundamentals(code, 3000)
+      
+      console.log('Bulk fetch completed:', result)
       
       // Update the query cache with the new data
       await refetch()
-      alert('Fundamental data refreshed successfully!')
+      
+      const message = `Bulk fetch completed successfully!\n` +
+        `Total symbols: ${result.totalSymbols}\n` +
+        `Symbols without data: ${result.symbolsWithoutData}\n` +
+        `Processed: ${result.processedSymbols}\n` +
+        `Successful fetches: ${result.successfulFetches}\n` +
+        `Failed fetches: ${result.failedFetches}\n` +
+        `Batches processed: ${result.batchesProcessed}`
+      
+      alert(message)
     } catch (err) {
-      console.error('Failed to refresh fundamental data:', err)
-      alert(`Failed to refresh fundamental data: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      console.error('Failed to bulk fetch fundamental data:', err)
+      alert(`Failed to bulk fetch fundamental data: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
       setIsRefreshingFundamentals(false)
     }
@@ -211,7 +217,7 @@ export default function SymbolsPage() {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={handleRefreshFundamentals}
+            onClick={handleBulkFetchFundamentals}
             disabled={isRefreshingFundamentals}
             className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
           >
@@ -228,7 +234,7 @@ export default function SymbolsPage() {
                 d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
               />
             </svg>
-            {isRefreshingFundamentals ? 'Refreshing...' : 'Refresh Fundamentals'}
+            {isRefreshingFundamentals ? 'Fetching...' : 'Batch Fetch 3K Fundamentals'}
           </button>
           <button
             onClick={handleRefresh}

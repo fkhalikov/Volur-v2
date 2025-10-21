@@ -235,7 +235,7 @@ export default function StockDetailsModal({
                       {stockDetails.fundamentals ? (
                         <Tab.Group>
                           <Tab.List className="flex flex-wrap gap-1 rounded-lg bg-slate-800 p-1 mb-4">
-                            {['Overview', 'Highlights', 'Valuation', 'Technicals', 'Splits & Dividends', 'Earnings', 'Financials'].map((tabName) => (
+                            {['Overview', 'Description', 'Highlights', 'Valuation', 'Technicals', 'Splits & Dividends', 'Earnings', 'Financials'].map((tabName) => (
                               <Tab
                                 key={tabName}
                                 className={({ selected }) =>
@@ -314,6 +314,62 @@ export default function StockDetailsModal({
                                     <p className="text-white">{stockDetails.fundamentals.debtToEquity?.toFixed(2) || 'N/A'}</p>
                                   </div>
                                 </div>
+                              </div>
+                            </Tab.Panel>
+
+                            {/* Description Tab */}
+                            <Tab.Panel>
+                              <div className="space-y-4">
+                                <div>
+                                  <h5 className="text-white font-medium mb-2">Company Description</h5>
+                                  <div className="bg-slate-700 rounded-lg p-4">
+                                    <p className="text-slate-200 leading-relaxed text-sm">
+                                      {stockDetails.fundamentals.description || 'No company description available'}
+                                    </p>
+                                  </div>
+                                </div>
+                                
+                                {/* Additional Company Details */}
+                                {(stockDetails.fundamentals.website || stockDetails.fundamentals.companyName) && (
+                                  <div>
+                                    <h5 className="text-white font-medium mb-2">Company Details</h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                      {stockDetails.fundamentals.companyName && (
+                                        <div>
+                                          <span className="text-slate-400">Company Name:</span>
+                                          <p className="text-white">{stockDetails.fundamentals.companyName}</p>
+                                        </div>
+                                      )}
+                                      {stockDetails.fundamentals.website && (
+                                        <div>
+                                          <span className="text-slate-400">Website:</span>
+                                          <p className="text-white">
+                                            <a 
+                                              href={stockDetails.fundamentals.website} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="text-blue-400 hover:text-blue-300 underline"
+                                            >
+                                              {stockDetails.fundamentals.website}
+                                            </a>
+                                          </p>
+                                        </div>
+                                      )}
+                                      {stockDetails.fundamentals.sector && (
+                                        <div>
+                                          <span className="text-slate-400">Sector:</span>
+                                          <p className="text-white">{stockDetails.fundamentals.sector}</p>
+                                        </div>
+                                      )}
+                                      {stockDetails.fundamentals.industry && (
+                                        <div>
+                                          <span className="text-slate-400">Industry:</span>
+                                          <p className="text-white">{stockDetails.fundamentals.industry}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </Tab.Panel>
 
