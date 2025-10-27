@@ -16,6 +16,8 @@ public interface ISymbolRepository
         int pageSize,
         string? searchQuery = null,
         string? typeFilter = null,
+        string? sortBy = null,
+        string? sortDirection = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

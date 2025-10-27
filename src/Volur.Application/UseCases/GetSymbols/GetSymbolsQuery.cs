@@ -9,6 +9,8 @@ public sealed record GetSymbolsQuery(
     int PageSize = 50,
     string? SearchQuery = null,
     string? TypeFilter = null,
-    bool ForceRefresh = false
+    bool ForceRefresh = false,
+    string? SortBy = null,
+    string? SortDirection = null
 );
 

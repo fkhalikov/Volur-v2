@@ -45,20 +45,31 @@ public sealed class BulkFetchFundamentalsHandler
             var allSymbols = allSymbolsResult.Value.symbols;
             _logger.LogInformation("Found {TotalSymbols} symbols for exchange {ExchangeCode}", allSymbols.Count, command.ExchangeCode);
 
-            // Filter symbols that don't have cached fundamental data
+            // Filter symbols that don't have cached fundamental data and aren't marked as having no data available
             var symbolsWithoutData = new List<Domain.Entities.Symbol>();
+            var skippedNoDataSymbols = 0;
             
             foreach (var symbol in allSymbols)
             {
                 var cachedFundamentals = await _stockDataRepository.GetFundamentalsAsync(symbol.Ticker, cancellationToken);
                 if (cachedFundamentals == null)
                 {
-                    symbolsWithoutData.Add(symbol);
+                    // Check if this symbol is marked as having no data available
+                    var isNoDataAvailable = await _stockDataRepository.IsNoDataAvailableAsync(symbol.Ticker, symbol.ExchangeCode, cancellationToken);
+                    if (!isNoDataAvailable)
+                    {
+                        symbolsWithoutData.Add(symbol);
+                    }
+                    else
+                    {
+                        skippedNoDataSymbols++;
+                        _logger.LogDebug("Skipping {Ticker}.{ExchangeCode} - marked as no data available", symbol.Ticker, symbol.ExchangeCode);
+                    }
                 }
             }
 
-            _logger.LogInformation("Found {SymbolsWithoutData} symbols without cached fundamental data out of {TotalSymbols}", 
-                symbolsWithoutData.Count, allSymbols.Count);
+            _logger.LogInformation("Found {SymbolsWithoutData} symbols without cached fundamental data out of {TotalSymbols} (skipped {SkippedNoData} symbols marked as no-data-available)", 
+                symbolsWithoutData.Count, allSymbols.Count, skippedNoDataSymbols);
 
             if (!symbolsWithoutData.Any())
             {
@@ -66,9 +77,13 @@ public sealed class BulkFetchFundamentalsHandler
                     ExchangeCode: command.ExchangeCode,
                     TotalSymbols: allSymbols.Count,
                     SymbolsWithoutData: 0,
+                    SkippedNoDataSymbols: skippedNoDataSymbols,
                     ProcessedSymbols: 0,
                     SuccessfulFetches: 0,
                     FailedFetches: 0,
+                    RateLimitHits: 0,
+                    DailyLimitHit: false,
+                    TotalWaitTime: TimeSpan.Zero,
                     BatchesProcessed: 0,
                     StartedAt: DateTime.UtcNow,
                     CompletedAt: DateTime.UtcNow
@@ -81,6 +96,8 @@ public sealed class BulkFetchFundamentalsHandler
             var successfulFetches = 0;
             var failedFetches = 0;
             var batchesProcessed = 0;
+            var rateLimitHits = 0;
+            var totalWaitTime = TimeSpan.Zero;
 
             var batches = symbolsWithoutData
                 .Select((symbol, index) => new { symbol, index })
@@ -110,19 +127,48 @@ public sealed class BulkFetchFundamentalsHandler
                             // Cache the fundamental data
                             await _stockDataRepository.UpsertFundamentalsAsync(fundamentalsResult.Value, cancellationToken);
                             
-                            _logger.LogDebug("Successfully fetched and cached fundamentals for {Ticker}", symbol.Ticker);
-                            return true;
+                            // Remove from no-data-available list if it was there (data is now available)
+                            await _stockDataRepository.RemoveNoDataAvailableAsync(symbol.Ticker, symbol.ExchangeCode, cancellationToken);
+                            
+                            _logger.LogDebug("Successfully fetched and cached fundamentals for {Ticker}.{ExchangeCode}", symbol.Ticker, symbol.ExchangeCode);
+                            return (success: true, isRateLimit: false, isDailyLimit: false);
                         }
                         else
                         {
-                            _logger.LogWarning("Failed to fetch fundamentals for {Ticker}: {Error}", symbol.Ticker, fundamentalsResult.Error?.Message);
-                            return false;
+                            // Check if this is a rate limit or daily limit error
+                            var isRateLimit = fundamentalsResult.Error?.Code == "PROVIDER_RATE_LIMIT";
+                            var isDailyLimit = fundamentalsResult.Error?.Code == "PROVIDER_DAILY_LIMIT";
+                            
+                            if (isDailyLimit)
+                            {
+                                _logger.LogError("Daily limit exceeded for {Ticker}.{ExchangeCode}: {Error} - STOPPING bulk fetch", 
+                                    symbol.Ticker, symbol.ExchangeCode, fundamentalsResult.Error?.Message);
+                                return (success: false, isRateLimit: false, isDailyLimit: true);
+                            }
+                            else if (isRateLimit)
+                            {
+                                _logger.LogWarning("Rate limit hit for {Ticker}.{ExchangeCode}: {Error}", 
+                                    symbol.Ticker, symbol.ExchangeCode, fundamentalsResult.Error?.Message);
+                                return (success: false, isRateLimit: true, isDailyLimit: false);
+                            }
+                            else
+                            {
+                                // Mark as having no data available to avoid future requests
+                                await _stockDataRepository.MarkAsNoDataAvailableAsync(symbol.Ticker, symbol.ExchangeCode, fundamentalsResult.Error?.Message, cancellationToken);
+                                
+                                _logger.LogWarning("Failed to fetch fundamentals for {Ticker}.{ExchangeCode}: {Error} - marked as no-data-available", 
+                                    symbol.Ticker, symbol.ExchangeCode, fundamentalsResult.Error?.Message);
+                                return (success: false, isRateLimit: false, isDailyLimit: false);
+                            }
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error processing symbol {Ticker}", symbol.Ticker);
-                        return false;
+                        // Mark as having no data available due to exception
+                        await _stockDataRepository.MarkAsNoDataAvailableAsync(symbol.Ticker, symbol.ExchangeCode, ex.Message, cancellationToken);
+                        
+                        _logger.LogError(ex, "Error processing symbol {Ticker}.{ExchangeCode} - marked as no-data-available", symbol.Ticker, symbol.ExchangeCode);
+                        return (success: false, isRateLimit: false, isDailyLimit: false);
                     }
                 });
 
@@ -143,19 +189,74 @@ public sealed class BulkFetchFundamentalsHandler
 
                 var batchResults = await Task.WhenAll(limitedTasks);
                 
-                var batchSuccesses = batchResults.Count(r => r);
-                var batchFailures = batchResults.Count(r => !r);
+                var batchSuccesses = batchResults.Count(r => r.success);
+                var batchFailures = batchResults.Count(r => !r.success);
+                var batchRateLimits = batchResults.Count(r => r.isRateLimit);
+                var batchDailyLimits = batchResults.Count(r => r.isDailyLimit);
                 
                 processedSymbols += batch.Count;
                 successfulFetches += batchSuccesses;
                 failedFetches += batchFailures;
+                rateLimitHits += batchRateLimits;
 
-                _logger.LogInformation("Batch {BatchNumber} completed: {Successes} successful, {Failures} failed", 
-                    batchesProcessed, batchSuccesses, batchFailures);
+                _logger.LogInformation("Batch {BatchNumber} completed: {Successes} successful, {Failures} failed, {RateLimits} rate limited, {DailyLimits} daily limited", 
+                    batchesProcessed, batchSuccesses, batchFailures, batchRateLimits, batchDailyLimits);
 
-                // Small delay between batches to avoid overwhelming the API
-                if (batchesProcessed < batches.Count)
+                // Handle daily limit - STOP the entire bulk fetch operation
+                if (batchDailyLimits > 0)
                 {
+                    _logger.LogError("Daily limit exceeded in batch {BatchNumber}. STOPPING bulk fetch operation immediately.", batchesProcessed);
+                    
+                    // Return early with current progress
+                    var earlyCompletedAt = DateTime.UtcNow;
+                    var earlyDuration = earlyCompletedAt - startedAt;
+
+                    _logger.LogError("Bulk fetch STOPPED due to daily limit: {ProcessedSymbols} processed, {SuccessfulFetches} successful, {FailedFetches} failed, {RateLimitHits} rate limited in {Duration}",
+                        processedSymbols, successfulFetches, failedFetches, rateLimitHits, earlyDuration);
+
+                    return Result.Success(new BulkFetchFundamentalsResponse(
+                        ExchangeCode: command.ExchangeCode,
+                        TotalSymbols: allSymbols.Count,
+                        SymbolsWithoutData: symbolsWithoutData.Count,
+                        SkippedNoDataSymbols: skippedNoDataSymbols,
+                        ProcessedSymbols: processedSymbols,
+                        SuccessfulFetches: successfulFetches,
+                        FailedFetches: failedFetches,
+                        RateLimitHits: rateLimitHits,
+                        DailyLimitHit: true,
+                        TotalWaitTime: totalWaitTime,
+                        BatchesProcessed: batchesProcessed,
+                        StartedAt: startedAt,
+                        CompletedAt: earlyCompletedAt
+                    ));
+                }
+
+                // Handle rate limiting intelligently
+                if (batchRateLimits > 0)
+                {
+                    _logger.LogWarning("Rate limit detected in batch {BatchNumber}. Pausing bulk fetch operation.", batchesProcessed);
+                    
+                    // Calculate wait time based on rate limit hits
+                    var waitTime = TimeSpan.FromMinutes(Math.Min(5, batchRateLimits)); // Max 5 minutes
+                    totalWaitTime = totalWaitTime.Add(waitTime);
+                    
+                    _logger.LogInformation("Pausing bulk fetch for {WaitTime} to respect rate limits", waitTime);
+                    
+                    try
+                    {
+                        await Task.Delay(waitTime, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _logger.LogWarning("Bulk fetch operation was cancelled during rate limit wait");
+                        break;
+                    }
+                    
+                    _logger.LogInformation("Resuming bulk fetch after rate limit wait");
+                }
+                else if (batchesProcessed < batches.Count)
+                {
+                    // Normal delay between batches to avoid overwhelming the API
                     await Task.Delay(1000, cancellationToken);
                 }
             }
@@ -163,16 +264,20 @@ public sealed class BulkFetchFundamentalsHandler
             var completedAt = DateTime.UtcNow;
             var duration = completedAt - startedAt;
 
-            _logger.LogInformation("Bulk fetch completed for {ExchangeCode}: {ProcessedSymbols} processed, {SuccessfulFetches} successful, {FailedFetches} failed in {Duration}",
-                command.ExchangeCode, processedSymbols, successfulFetches, failedFetches, duration);
+            _logger.LogInformation("Bulk fetch completed for {ExchangeCode}: {ProcessedSymbols} processed, {SuccessfulFetches} successful, {FailedFetches} failed, {RateLimitHits} rate limited in {Duration} (waited {WaitTime} for rate limits)",
+                command.ExchangeCode, processedSymbols, successfulFetches, failedFetches, rateLimitHits, duration, totalWaitTime);
 
             return Result.Success(new BulkFetchFundamentalsResponse(
                 ExchangeCode: command.ExchangeCode,
                 TotalSymbols: allSymbols.Count,
                 SymbolsWithoutData: symbolsWithoutData.Count,
+                SkippedNoDataSymbols: skippedNoDataSymbols,
                 ProcessedSymbols: processedSymbols,
                 SuccessfulFetches: successfulFetches,
                 FailedFetches: failedFetches,
+                RateLimitHits: rateLimitHits,
+                DailyLimitHit: false,
+                TotalWaitTime: totalWaitTime,
                 BatchesProcessed: batchesProcessed,
                 StartedAt: startedAt,
                 CompletedAt: completedAt
@@ -193,9 +298,13 @@ public sealed record BulkFetchFundamentalsResponse(
     string ExchangeCode,
     int TotalSymbols,
     int SymbolsWithoutData,
+    int SkippedNoDataSymbols,
     int ProcessedSymbols,
     int SuccessfulFetches,
     int FailedFetches,
+    int RateLimitHits,
+    bool DailyLimitHit,
+    TimeSpan TotalWaitTime,
     int BatchesProcessed,
     DateTime StartedAt,
     DateTime CompletedAt

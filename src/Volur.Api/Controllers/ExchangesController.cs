@@ -66,9 +66,11 @@ public class ExchangesController : ControllerBase
         [FromQuery] int pageSize = 50,
         [FromQuery] string? type = null,
         [FromQuery] bool forceRefresh = false,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
         CancellationToken cancellationToken = default)
     {
-        var query = new GetSymbolsQuery(code, page, pageSize, q, type, forceRefresh);
+        var query = new GetSymbolsQuery(code, page, pageSize, q, type, forceRefresh, sortBy, sortDirection);
 
         // Validate
         var validator = new GetSymbolsQueryValidator();

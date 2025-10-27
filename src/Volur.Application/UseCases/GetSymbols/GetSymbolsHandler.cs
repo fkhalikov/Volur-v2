@@ -65,6 +65,8 @@ public sealed class GetSymbolsHandler
                 query.PageSize,
                 query.SearchQuery,
                 typeFilter,
+                query.SortBy,
+                query.SortDirection,
                 cancellationToken);
 
             if (cached.HasValue)
@@ -78,14 +80,49 @@ public sealed class GetSymbolsHandler
                     _logger.LogInformation("Symbols cache hit for {ExchangeCode}. TTL remaining: {TtlSeconds}s", 
                         query.ExchangeCode, ttlRemaining);
 
-                    return await BuildSuccessResponseAsync(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", ttlRemaining, cancellationToken);
+                    // For enriched field sorting, we need to get a larger subset of data and sort it properly
+                    if (IsEnrichedFieldSort(query.SortBy))
+                    {
+                        // Get a larger subset of symbols from cache for proper sorting
+                        var sortingPageSize = Math.Max(500, query.PageSize * 10);
+                        var allSymbolsResult = await _symbolRepository.GetByExchangeAsync(
+                            query.ExchangeCode,
+                            1,
+                            sortingPageSize,
+                            query.SearchQuery,
+                            typeFilter,
+                            null, // No sorting at database level for enriched fields
+                            null,
+                            cancellationToken);
+                        
+                        if (allSymbolsResult.HasValue)
+                        {
+                            var (symbolsSubset, _, _) = allSymbolsResult.Value;
+                            var enrichedSymbols = await EnrichSymbolsWithFundamentalDataAsync(symbolsSubset, cancellationToken);
+                            var sortedSymbols = ApplyClientSideSorting(enrichedSymbols, query.SortBy, query.SortDirection);
+                            
+                            var hasNext = (query.Page * query.PageSize) < sortedSymbols.Count;
+                            var skip = (query.Page - 1) * query.PageSize;
+                            var pagedSymbols = sortedSymbols.Skip(skip).Take(query.PageSize).ToList();
+
+                            return Result.Success(new SymbolsResponse(
+                                Exchange: exchange.ToDto(),
+                                Pagination: new PaginationMetadata(query.Page, query.PageSize, sortedSymbols.Count, hasNext),
+                                Items: pagedSymbols,
+                                FetchedAt: fetchedAt.Value,
+                                Cache: new CacheMetadata("mongo", ttlRemaining)
+                            ));
+                        }
+                    }
+
+                    return await BuildSuccessResponseAsync(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", ttlRemaining, query.SortBy, query.SortDirection, cancellationToken);
                 }
 
                 // If cache expired but we have a search query, return expired cache data instead of refreshing
                 if (!string.IsNullOrWhiteSpace(query.SearchQuery))
                 {
                     _logger.LogInformation("Symbols cache expired for {ExchangeCode}, but returning expired cache for search query", query.ExchangeCode);
-                    return await BuildSuccessResponseAsync(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", 0, cancellationToken);
+                    return await BuildSuccessResponseAsync(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", 0, query.SortBy, query.SortDirection, cancellationToken);
                 }
 
                 _logger.LogInformation("Symbols cache expired for {ExchangeCode}, fetching from provider", query.ExchangeCode);
@@ -94,7 +131,7 @@ public sealed class GetSymbolsHandler
             {
                 // No cached data but we have a search query - return empty results instead of refreshing
                 _logger.LogInformation("No cached symbols for {ExchangeCode} and search query provided, returning empty results", query.ExchangeCode);
-                return await BuildSuccessResponseAsync(exchange, Array.Empty<Symbol>(), query.Page, query.PageSize, 0, DateTime.UtcNow, "none", 0, cancellationToken);
+                return await BuildSuccessResponseAsync(exchange, Array.Empty<Symbol>(), query.Page, query.PageSize, 0, DateTime.UtcNow, "none", 0, query.SortBy, query.SortDirection, cancellationToken);
             }
         }
         else
@@ -141,29 +178,83 @@ public sealed class GetSymbolsHandler
             // Continue - we have the data from provider
         }
 
-        // Re-query with filters and pagination
-        var finalResult = await _symbolRepository.GetByExchangeAsync(
-            query.ExchangeCode,
-            query.Page,
-            query.PageSize,
-            query.SearchQuery,
-            typeFilter,
-            cancellationToken);
-
-        if (!finalResult.HasValue)
+        // For enriched field sorting, we need to get a larger subset of data, sort it, then paginate
+        if (IsEnrichedFieldSort(query.SortBy))
         {
-            // Shouldn't happen, but handle gracefully
+            // Get a larger subset of symbols for enriched field sorting (limit to prevent timeouts)
+            // We'll get 10x the page size to have enough data for proper sorting
+            var sortingPageSize = Math.Max(500, query.PageSize * 10); // Minimum 500 symbols for sorting
+            
+            var allSymbolsResult = await _symbolRepository.GetByExchangeAsync(
+                query.ExchangeCode,
+                1, // Start from page 1
+                sortingPageSize, // Get a larger subset
+                query.SearchQuery,
+                typeFilter,
+                null, // No sorting at database level for enriched fields
+                null,
+                cancellationToken);
+            
+            if (!allSymbolsResult.HasValue)
+            {
+                return Result.Success(new SymbolsResponse(
+                    Exchange: exchange.ToDto(),
+                    Pagination: new PaginationMetadata(query.Page, query.PageSize, 0, false),
+                    Items: Array.Empty<SymbolDto>(),
+                    FetchedAt: fetchedAtUtc,
+                    Cache: new CacheMetadata("provider", (int)ttl.TotalSeconds)
+                ));
+            }
+
+            var (symbolsSubset, totalCount, _) = allSymbolsResult.Value;
+            
+            // Enrich the subset of symbols with fundamental data
+            var enrichedSymbols = await EnrichSymbolsWithFundamentalDataAsync(symbolsSubset, cancellationToken);
+            
+            // Apply client-side sorting to the enriched data
+            var sortedSymbols = ApplyClientSideSorting(enrichedSymbols, query.SortBy, query.SortDirection);
+            
+            // Apply pagination to the sorted results
+            var hasNext = (query.Page * query.PageSize) < sortedSymbols.Count;
+            var skip = (query.Page - 1) * query.PageSize;
+            var pagedSymbols = sortedSymbols.Skip(skip).Take(query.PageSize).ToList();
+
             return Result.Success(new SymbolsResponse(
                 Exchange: exchange.ToDto(),
-                Pagination: new PaginationMetadata(query.Page, query.PageSize, 0, false),
-                Items: Array.Empty<SymbolDto>(),
+                Pagination: new PaginationMetadata(query.Page, query.PageSize, sortedSymbols.Count, hasNext),
+                Items: pagedSymbols,
                 FetchedAt: fetchedAtUtc,
                 Cache: new CacheMetadata("provider", (int)ttl.TotalSeconds)
             ));
         }
+        else
+        {
+            // For database fields, use the existing database-level sorting with pagination
+            var finalResult = await _symbolRepository.GetByExchangeAsync(
+                query.ExchangeCode,
+                query.Page,
+                query.PageSize,
+                query.SearchQuery,
+                typeFilter,
+                query.SortBy,
+                query.SortDirection,
+                cancellationToken);
 
-        var (filteredSymbols, finalTotalCount, _) = finalResult.Value;
-        return await BuildSuccessResponseAsync(exchange, filteredSymbols, query.Page, query.PageSize, finalTotalCount, fetchedAtUtc, "provider", (int)ttl.TotalSeconds, cancellationToken);
+            if (!finalResult.HasValue)
+            {
+                // Shouldn't happen, but handle gracefully
+                return Result.Success(new SymbolsResponse(
+                    Exchange: exchange.ToDto(),
+                    Pagination: new PaginationMetadata(query.Page, query.PageSize, 0, false),
+                    Items: Array.Empty<SymbolDto>(),
+                    FetchedAt: fetchedAtUtc,
+                    Cache: new CacheMetadata("provider", (int)ttl.TotalSeconds)
+                ));
+            }
+
+            var (filteredSymbols, finalTotalCount, _) = finalResult.Value;
+            return await BuildSuccessResponseAsync(exchange, filteredSymbols, query.Page, query.PageSize, finalTotalCount, fetchedAtUtc, "provider", (int)ttl.TotalSeconds, query.SortBy, query.SortDirection, cancellationToken);
+        }
     }
 
     private async Task<Result<SymbolsResponse>> BuildSuccessResponseAsync(
@@ -175,6 +266,8 @@ public sealed class GetSymbolsHandler
         DateTime fetchedAt,
         string cacheSource,
         int ttlSeconds,
+        string? sortBy,
+        string? sortDirection,
         CancellationToken cancellationToken)
     {
         var hasNext = (page * pageSize) < totalCount;
@@ -182,10 +275,13 @@ public sealed class GetSymbolsHandler
         // Fetch fundamental data for all symbols in parallel
         var symbolDtos = await EnrichSymbolsWithFundamentalDataAsync(symbols, cancellationToken);
 
+        // Apply client-side sorting for enriched fields if needed
+        var sortedSymbols = ApplyClientSideSorting(symbolDtos, sortBy, sortDirection);
+
         return Result.Success(new SymbolsResponse(
             Exchange: exchange.ToDto(),
             Pagination: new PaginationMetadata(page, pageSize, totalCount, hasNext),
-            Items: symbolDtos,
+            Items: sortedSymbols,
             FetchedAt: fetchedAt,
             Cache: new CacheMetadata(cacheSource, ttlSeconds)
         ));
@@ -276,6 +372,67 @@ public sealed class GetSymbolsHandler
             enrichedCount, symbols.Count);
 
         return enrichedSymbols.ToList();
+    }
+
+    private List<SymbolDto> ApplyClientSideSorting(List<SymbolDto> symbols, string? sortBy, string? sortDirection)
+    {
+        if (string.IsNullOrWhiteSpace(sortBy) || string.IsNullOrWhiteSpace(sortDirection))
+        {
+            return symbols;
+        }
+
+        var isDescending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+
+        return sortBy.ToLowerInvariant() switch
+        {
+            "price" => isDescending 
+                ? symbols.OrderByDescending(x => x.CurrentPrice ?? 0).ToList()
+                : symbols.OrderBy(x => x.CurrentPrice ?? 0).ToList(),
+            "change" => isDescending 
+                ? symbols.OrderByDescending(x => x.ChangePercent ?? 0).ToList()
+                : symbols.OrderBy(x => x.ChangePercent ?? 0).ToList(),
+            "marketcap" => isDescending 
+                ? symbols.OrderByDescending(x => x.MarketCap ?? 0).ToList()
+                : symbols.OrderBy(x => x.MarketCap ?? 0).ToList(),
+            "pe" => isDescending 
+                ? symbols.OrderByDescending(x => x.TrailingPE ?? 0).ToList()
+                : symbols.OrderBy(x => x.TrailingPE ?? 0).ToList(),
+            "dividend" => isDescending 
+                ? symbols.OrderByDescending(x => x.DividendYield ?? 0).ToList()
+                : symbols.OrderBy(x => x.DividendYield ?? 0).ToList(),
+            "sector" => isDescending 
+                ? symbols.OrderByDescending(x => x.Sector ?? "").ToList()
+                : symbols.OrderBy(x => x.Sector ?? "").ToList(),
+            "industry" => isDescending 
+                ? symbols.OrderByDescending(x => x.Industry ?? "").ToList()
+                : symbols.OrderBy(x => x.Industry ?? "").ToList(),
+            _ => symbols // No client-side sorting needed for database fields
+        };
+    }
+
+    private bool IsEnrichedFieldSort(string? sortBy)
+    {
+        if (string.IsNullOrWhiteSpace(sortBy))
+            return false;
+
+        return sortBy.ToLowerInvariant() switch
+        {
+            "price" or "change" or "marketcap" or "pe" or "dividend" or "sector" or "industry" => true,
+            _ => false
+        };
+    }
+
+    private List<SymbolDto> ApplySearchFilter(List<SymbolDto> symbols, string? searchQuery)
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+            return symbols;
+
+        var query = searchQuery.ToLowerInvariant();
+        return symbols.Where(s => 
+            s.Ticker.ToLowerInvariant().Contains(query) ||
+            s.Name.ToLowerInvariant().Contains(query) ||
+            s.FullSymbol.ToLowerInvariant().Contains(query)
+        ).ToList();
     }
 }
 

@@ -35,6 +35,9 @@ public sealed class MongoDbContext
     public IMongoCollection<StockFundamentalsDocument> StockFundamentals => 
         _database.GetCollection<StockFundamentalsDocument>("stockFundamentals");
 
+    public IMongoCollection<NoDataAvailableDocument> NoDataAvailable => 
+        _database.GetCollection<NoDataAvailableDocument>("noDataAvailable");
+
     /// <summary>
     /// Ensures all required indexes are created.
     /// </summary>
@@ -125,6 +128,29 @@ public sealed class MongoDbContext
                 )
             };
             await StockFundamentals.Indexes.CreateManyAsync(fundamentalsIndexes, cancellationToken);
+
+            // NoDataAvailable collection indexes
+            var noDataIndexes = new List<CreateIndexModel<NoDataAvailableDocument>>
+            {
+                // Unique compound index on ticker + exchangeCode
+                new CreateIndexModel<NoDataAvailableDocument>(
+                    Builders<NoDataAvailableDocument>.IndexKeys
+                        .Ascending(x => x.Ticker)
+                        .Ascending(x => x.ExchangeCode),
+                    new CreateIndexOptions { Unique = true, Name = "idx_ticker_exchange_unique" }
+                ),
+                // TTL index on expiresAt for automatic cleanup
+                new CreateIndexModel<NoDataAvailableDocument>(
+                    Builders<NoDataAvailableDocument>.IndexKeys.Ascending(x => x.ExpiresAt),
+                    new CreateIndexOptions { ExpireAfter = TimeSpan.Zero, Name = "idx_expiresAt_ttl" }
+                ),
+                // Index on lastAttemptedAt for queries
+                new CreateIndexModel<NoDataAvailableDocument>(
+                    Builders<NoDataAvailableDocument>.IndexKeys.Descending(x => x.LastAttemptedAt),
+                    new CreateIndexOptions { Name = "idx_lastattemptedat" }
+                )
+            };
+            await NoDataAvailable.Indexes.CreateManyAsync(noDataIndexes, cancellationToken);
 
             _logger.LogInformation("MongoDB indexes created successfully");
         }

@@ -27,6 +27,8 @@ public sealed class SymbolRepository : ISymbolRepository
         int pageSize,
         string? searchQuery = null,
         string? typeFilter = null,
+        string? sortBy = null,
+        string? sortDirection = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -56,11 +58,14 @@ public sealed class SymbolRepository : ISymbolRepository
             if (totalCount == 0)
                 return null;
 
+            // Build sort definition
+            var sortDefinition = BuildSortDefinition(sortBy, sortDirection);
+
             // Get paged results
             var skip = (page - 1) * pageSize;
             var documents = await _context.Symbols
                 .Find(filter)
-                .Sort(Builders<SymbolDocument>.Sort.Ascending(x => x.Ticker))
+                .Sort(sortDefinition)
                 .Skip(skip)
                 .Limit(pageSize)
                 .ToListAsync(cancellationToken);
@@ -221,6 +226,33 @@ public sealed class SymbolRepository : ISymbolRepository
             _logger.LogError(ex, "Failed to get all symbols for exchange: {ExchangeCode}", exchangeCode);
             return null;
         }
+    }
+
+    private SortDefinition<SymbolDocument> BuildSortDefinition(string? sortBy, string? sortDirection)
+    {
+        var sortBuilder = Builders<SymbolDocument>.Sort;
+        var isDescending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+
+        // Default sorting by ticker if no sort field specified
+        if (string.IsNullOrWhiteSpace(sortBy))
+        {
+            return sortBuilder.Ascending(x => x.Ticker);
+        }
+
+        // Map frontend sort fields to MongoDB document fields
+        // Note: Some fields like price, marketcap, pe, etc. are enriched data and will be sorted client-side
+        return sortBy.ToLowerInvariant() switch
+        {
+            "ticker" or "symbol" => isDescending ? sortBuilder.Descending(x => x.Ticker) : sortBuilder.Ascending(x => x.Ticker),
+            "name" => isDescending ? sortBuilder.Descending(x => x.Name) : sortBuilder.Ascending(x => x.Name),
+            "type" => isDescending ? sortBuilder.Descending(x => x.Type) : sortBuilder.Ascending(x => x.Type),
+            "currency" => isDescending ? sortBuilder.Descending(x => x.Currency) : sortBuilder.Ascending(x => x.Currency),
+            "isactive" => isDescending ? sortBuilder.Descending(x => x.IsActive) : sortBuilder.Ascending(x => x.IsActive),
+            // Sector and Industry are enriched fields, not stored in database - handle client-side
+            // For enriched fields (price, marketcap, pe, dividend, change), we'll sort by ticker and handle client-side
+            "price" or "marketcap" or "pe" or "dividend" or "change" => sortBuilder.Ascending(x => x.Ticker),
+            _ => sortBuilder.Ascending(x => x.Ticker) // Default fallback
+        };
     }
 }
 

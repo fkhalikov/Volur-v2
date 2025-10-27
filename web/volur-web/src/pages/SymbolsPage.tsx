@@ -6,6 +6,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import ErrorMessage from '../components/ErrorMessage'
 import EmptyState from '../components/EmptyState'
 import StockDetailsModal from '../components/StockDetailsModal'
+import SortableHeader, { SortDirection } from '../components/SortableHeader'
 import { useDebounce } from '../hooks/useDebounce'
 import { StockDetailsResponse } from '../types/api'
 
@@ -41,6 +42,10 @@ export default function SymbolsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isRefreshingFundamentals, setIsRefreshingFundamentals] = useState(false)
   
+  // Sorting state
+  const [sortBy, setSortBy] = useState<string | undefined>()
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null)
+  
   // Stock details modal state
   const [selectedStock, setSelectedStock] = useState<StockDetailsResponse | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -50,18 +55,20 @@ export default function SymbolsPage() {
   
   const debouncedSearch = useDebounce(searchTerm, 300)
 
-  // Reset page when search changes
+  // Reset page when search or sorting changes
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch])
+  }, [debouncedSearch, sortBy, sortDirection])
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['symbols', code, page, pageSize, debouncedSearch],
+    queryKey: ['symbols', code, page, pageSize, debouncedSearch, sortBy, sortDirection],
     queryFn: () =>
       api.getSymbols(code!, {
         page,
         pageSize,
         q: debouncedSearch || undefined,
+        sortBy,
+        sortDirection: sortDirection || undefined,
       }),
     enabled: !!code,
   })
@@ -86,6 +93,11 @@ export default function SymbolsPage() {
   const handleCopyTicker = (ticker: string, event: React.MouseEvent) => {
     event.stopPropagation() // Prevent row click when copying
     navigator.clipboard.writeText(ticker)
+  }
+
+  const handleSort = (newSortBy: string, newDirection: SortDirection) => {
+    setSortBy(newDirection ? newSortBy : undefined)
+    setSortDirection(newDirection)
   }
 
   const handleSymbolClick = async (ticker: string) => {
@@ -125,7 +137,9 @@ export default function SymbolsPage() {
           page,
           pageSize,
           q: debouncedSearch || undefined,
-          forceRefresh: true
+          forceRefresh: true,
+          sortBy,
+          sortDirection: sortDirection || undefined
         })
         // Then refresh the query cache
         await refetch()
@@ -180,9 +194,13 @@ export default function SymbolsPage() {
       const message = `Bulk fetch completed successfully!\n` +
         `Total symbols: ${result.totalSymbols}\n` +
         `Symbols without data: ${result.symbolsWithoutData}\n` +
+        `Skipped (no-data-available): ${result.skippedNoDataSymbols}\n` +
         `Processed: ${result.processedSymbols}\n` +
         `Successful fetches: ${result.successfulFetches}\n` +
         `Failed fetches: ${result.failedFetches}\n` +
+        `Rate limit hits: ${result.rateLimitHits}\n` +
+        `Daily limit hit: ${result.dailyLimitHit ? 'YES - STOPPED' : 'No'}\n` +
+        `Total wait time: ${result.totalWaitTime}\n` +
         `Batches processed: ${result.batchesProcessed}`
       
       alert(message)
@@ -297,39 +315,94 @@ export default function SymbolsPage() {
             <table className="min-w-full divide-y divide-slate-700">
               <thead className="bg-slate-700">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Symbol
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Price
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Change %
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Market Cap
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    P/E Ratio
-                  </th>
-           <th className="px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">
-             Div Yield
-           </th>
-           <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-             Sector
-           </th>
-           <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-             Industry
-           </th>
-           <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-             Type
-           </th>
-           <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-             Status
-           </th>
+                  <SortableHeader
+                    title="Symbol"
+                    sortKey="ticker"
+                    currentSortBy={sortBy}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                  />
+                  <SortableHeader
+                    title="Name"
+                    sortKey="name"
+                    currentSortBy={sortBy}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                  />
+                  <SortableHeader
+                    title="Price"
+                    sortKey="price"
+                    currentSortBy={sortBy}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                  />
+                  <SortableHeader
+                    title="Change %"
+                    sortKey="change"
+                    currentSortBy={sortBy}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                  />
+                  <SortableHeader
+                    title="Market Cap"
+                    sortKey="marketcap"
+                    currentSortBy={sortBy}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                  />
+                  <SortableHeader
+                    title="P/E Ratio"
+                    sortKey="pe"
+                    currentSortBy={sortBy}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                  />
+                  <SortableHeader
+                    title="Div Yield"
+                    sortKey="dividend"
+                    currentSortBy={sortBy}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                  />
+                  <SortableHeader
+                    title="Sector"
+                    sortKey="sector"
+                    currentSortBy={sortBy}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                  />
+                  <SortableHeader
+                    title="Industry"
+                    sortKey="industry"
+                    currentSortBy={sortBy}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                  />
+                  <SortableHeader
+                    title="Type"
+                    sortKey="type"
+                    currentSortBy={sortBy}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                  />
+                  <SortableHeader
+                    title="Status"
+                    sortKey="isactive"
+                    currentSortBy={sortBy}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="left"
+                  />
                 </tr>
               </thead>
               <tbody className="bg-slate-800 divide-y divide-slate-700">

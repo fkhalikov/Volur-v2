@@ -360,9 +360,13 @@ export interface BulkFetchFundamentalsResponse {
   exchangeCode: string
   totalSymbols: number
   symbolsWithoutData: number
+  skippedNoDataSymbols: number
   processedSymbols: number
   successfulFetches: number
   failedFetches: number
+  rateLimitHits: number
+  dailyLimitHit: boolean
+  totalWaitTime: string
   batchesProcessed: number
   startedAt: string
   completedAt: string

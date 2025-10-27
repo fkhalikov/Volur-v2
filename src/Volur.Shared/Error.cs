@@ -20,6 +20,9 @@ public sealed record Error(string Code, string Message)
     public static Error ProviderRateLimit(string message) =>
         new("PROVIDER_RATE_LIMIT", message);
 
+    public static Error ProviderDailyLimit(string message) =>
+        new("PROVIDER_DAILY_LIMIT", message);
+
     public static Error CacheWriteFailed(string message) =>
         new("CACHE_WRITE_FAILED", message);
 

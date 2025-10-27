@@ -43,6 +43,8 @@ export const api = {
       q?: string
       type?: string
       forceRefresh?: boolean
+      sortBy?: string
+      sortDirection?: string
     } = {}
   ): Promise<SymbolsResponse> {
     const url = new URL(
@@ -55,6 +57,8 @@ export const api = {
     if (params.q) url.searchParams.set('q', params.q)
     if (params.type) url.searchParams.set('type', params.type)
     if (params.forceRefresh) url.searchParams.set('forceRefresh', 'true')
+    if (params.sortBy) url.searchParams.set('sortBy', params.sortBy)
+    if (params.sortDirection) url.searchParams.set('sortDirection', params.sortDirection)
 
     const response = await fetch(url.toString())
     return handleResponse<SymbolsResponse>(response)

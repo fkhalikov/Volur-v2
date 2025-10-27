@@ -172,4 +172,124 @@ public sealed class StockDataRepository : IStockDataRepository
             throw;
         }
     }
+
+    public async Task<bool> IsNoDataAvailableAsync(string ticker, string exchangeCode, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var filter = Builders<NoDataAvailableDocument>.Filter.And(
+                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.Ticker, ticker.ToUpperInvariant()),
+                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.ExchangeCode, exchangeCode.ToUpperInvariant())
+            );
+
+            var document = await _context.NoDataAvailable.Find(filter).FirstOrDefaultAsync(cancellationToken);
+            
+            var isMarked = document != null;
+            _logger.LogDebug("NoDataAvailable check for {Ticker}.{ExchangeCode}: {IsMarked}", ticker, exchangeCode, isMarked);
+            
+            return isMarked;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check NoDataAvailable for {Ticker}.{ExchangeCode}", ticker, exchangeCode);
+            return false; // Default to allowing the request on error
+        }
+    }
+
+    public async Task MarkAsNoDataAvailableAsync(string ticker, string exchangeCode, string? errorMessage = null, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var expiresAt = now.AddDays(30); // TTL: retry after 30 days
+
+            var filter = Builders<NoDataAvailableDocument>.Filter.And(
+                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.Ticker, ticker.ToUpperInvariant()),
+                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.ExchangeCode, exchangeCode.ToUpperInvariant())
+            );
+
+            var existingDoc = await _context.NoDataAvailable.Find(filter).FirstOrDefaultAsync(cancellationToken);
+
+            if (existingDoc != null)
+            {
+                // Update existing document
+                var update = Builders<NoDataAvailableDocument>.Update
+                    .Inc(x => x.FailureCount, 1)
+                    .Set(x => x.LastAttemptedAt, now)
+                    .Set(x => x.ExpiresAt, expiresAt)
+                    .Set(x => x.LastErrorMessage, errorMessage);
+
+                await _context.NoDataAvailable.UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+                
+                _logger.LogDebug("Updated NoDataAvailable for {Ticker}.{ExchangeCode}, failure count: {FailureCount}", 
+                    ticker, exchangeCode, existingDoc.FailureCount + 1);
+            }
+            else
+            {
+                // Create new document
+                var document = new NoDataAvailableDocument
+                {
+                    Ticker = ticker.ToUpperInvariant(),
+                    ExchangeCode = exchangeCode.ToUpperInvariant(),
+                    FailureCount = 1,
+                    FirstFailedAt = now,
+                    LastAttemptedAt = now,
+                    ExpiresAt = expiresAt,
+                    LastErrorMessage = errorMessage
+                };
+
+                await _context.NoDataAvailable.InsertOneAsync(document, cancellationToken: cancellationToken);
+                
+                _logger.LogDebug("Marked {Ticker}.{ExchangeCode} as NoDataAvailable", ticker, exchangeCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to mark {Ticker}.{ExchangeCode} as NoDataAvailable", ticker, exchangeCode);
+            // Don't throw - this is not critical for the main operation
+        }
+    }
+
+    public async Task RemoveNoDataAvailableAsync(string ticker, string exchangeCode, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var filter = Builders<NoDataAvailableDocument>.Filter.And(
+                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.Ticker, ticker.ToUpperInvariant()),
+                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.ExchangeCode, exchangeCode.ToUpperInvariant())
+            );
+
+            var result = await _context.NoDataAvailable.DeleteOneAsync(filter, cancellationToken);
+            
+            if (result.DeletedCount > 0)
+            {
+                _logger.LogDebug("Removed {Ticker}.{ExchangeCode} from NoDataAvailable list", ticker, exchangeCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to remove {Ticker}.{ExchangeCode} from NoDataAvailable list", ticker, exchangeCode);
+            // Don't throw - this is not critical for the main operation
+        }
+    }
+
+    public async Task<IReadOnlyList<(string ticker, string exchangeCode)>> GetNoDataAvailableForExchangeAsync(string exchangeCode, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var filter = Builders<NoDataAvailableDocument>.Filter.Eq(x => x.ExchangeCode, exchangeCode.ToUpperInvariant());
+            var documents = await _context.NoDataAvailable.Find(filter).ToListAsync(cancellationToken);
+
+            var result = documents.Select(d => (d.Ticker, d.ExchangeCode)).ToList();
+            
+            _logger.LogDebug("Found {Count} NoDataAvailable entries for exchange {ExchangeCode}", result.Count, exchangeCode);
+            
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get NoDataAvailable entries for exchange {ExchangeCode}", exchangeCode);
+            return Array.Empty<(string, string)>();
+        }
+    }
 }

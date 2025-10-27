@@ -26,4 +26,24 @@ public interface IStockDataRepository
     /// Caches stock fundamentals data for a ticker.
     /// </summary>
     Task UpsertFundamentalsAsync(StockFundamentalsDto fundamentals, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Checks if a stock is marked as having no fundamental data available.
+    /// </summary>
+    Task<bool> IsNoDataAvailableAsync(string ticker, string exchangeCode, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Marks a stock as having no fundamental data available.
+    /// </summary>
+    Task MarkAsNoDataAvailableAsync(string ticker, string exchangeCode, string? errorMessage = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes a stock from the no-data-available list (when data becomes available).
+    /// </summary>
+    Task RemoveNoDataAvailableAsync(string ticker, string exchangeCode, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets all stocks that are marked as having no data available for a given exchange.
+    /// </summary>
+    Task<IReadOnlyList<(string ticker, string exchangeCode)>> GetNoDataAvailableForExchangeAsync(string exchangeCode, CancellationToken cancellationToken = default);
 }

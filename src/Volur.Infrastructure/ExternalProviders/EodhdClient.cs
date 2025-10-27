@@ -92,8 +92,21 @@ public sealed class EodhdClient : IEodhdClient
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 var retryAfter = response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 60;
-                _logger.LogWarning("EODHD rate limit hit. Retry after {Seconds}s", retryAfter);
-                return Result.Failure<IReadOnlyList<T>>(Error.ProviderRateLimit($"Rate limit exceeded. Retry after {retryAfter} seconds."));
+                
+                // Check if this is a daily limit vs rate limit
+                var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                var isDailyLimit = IsDailyLimitResponse(responseContent);
+                
+                if (isDailyLimit)
+                {
+                    _logger.LogWarning("EODHD daily limit exceeded. Quota reset tomorrow.");
+                    return Result.Failure<IReadOnlyList<T>>(Error.ProviderDailyLimit("Daily API quota exceeded. Try again tomorrow."));
+                }
+                else
+                {
+                    _logger.LogWarning("EODHD rate limit hit. Retry after {Seconds}s", retryAfter);
+                    return Result.Failure<IReadOnlyList<T>>(Error.ProviderRateLimit($"Rate limit exceeded. Retry after {retryAfter} seconds."));
+                }
             }
 
             if (!response.IsSuccessStatusCode)
@@ -156,8 +169,21 @@ public sealed class EodhdClient : IEodhdClient
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 var retryAfter = response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 60;
-                _logger.LogWarning("EODHD rate limit hit. Retry after {Seconds}s", retryAfter);
-                return Result.Failure<T>(Error.ProviderRateLimit($"Rate limit exceeded. Retry after {retryAfter} seconds."));
+                
+                // Check if this is a daily limit vs rate limit
+                var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                var isDailyLimit = IsDailyLimitResponse(responseContent);
+                
+                if (isDailyLimit)
+                {
+                    _logger.LogWarning("EODHD daily limit exceeded. Quota reset tomorrow.");
+                    return Result.Failure<T>(Error.ProviderDailyLimit("Daily API quota exceeded. Try again tomorrow."));
+                }
+                else
+                {
+                    _logger.LogWarning("EODHD rate limit hit. Retry after {Seconds}s", retryAfter);
+                    return Result.Failure<T>(Error.ProviderRateLimit($"Rate limit exceeded. Retry after {retryAfter} seconds."));
+                }
             }
 
             if (!response.IsSuccessStatusCode)
@@ -204,6 +230,26 @@ public sealed class EodhdClient : IEodhdClient
             _logger.LogError(ex, "Unexpected error calling EODHD: {Endpoint} ({ElapsedMs}ms)", endpoint, elapsed.TotalMilliseconds);
             return Result.Failure<T>(Error.InternalError($"Unexpected error: {ex.Message}"));
         }
+    }
+
+    /// <summary>
+    /// Determines if the response indicates a daily limit vs rate limit.
+    /// EODHD typically returns different messages for daily quota vs rate limits.
+    /// </summary>
+    private static bool IsDailyLimitResponse(string responseContent)
+    {
+        if (string.IsNullOrWhiteSpace(responseContent))
+            return false;
+
+        var content = responseContent.ToLowerInvariant();
+        
+        // Common daily limit indicators from EODHD
+        return content.Contains("daily") || 
+               content.Contains("quota") || 
+               content.Contains("limit exceeded") ||
+               content.Contains("maximum requests") ||
+               content.Contains("per day") ||
+               content.Contains("daily limit");
     }
 }
 
