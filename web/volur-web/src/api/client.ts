@@ -1,4 +1,4 @@
-import { ExchangesResponse, SymbolsResponse, StockDetailsResponse, BulkFetchFundamentalsResponse } from '../types/api'
+import { ExchangesResponse, SymbolsResponse, StockDetailsResponse, BulkFetchFundamentalsResponse, StockNoteDto, StockKeyValueDto } from '../types/api'
 
 const API_BASE_URL = '/api'
 
@@ -106,6 +106,95 @@ export const api = {
       method: 'POST',
     })
     return handleResponse<BulkFetchFundamentalsResponse>(response)
+  },
+
+  // Stock Analysis - Notes
+  async getStockNotes(ticker: string, exchangeCode: string): Promise<StockNoteDto[]> {
+    const response = await fetch(
+      `${API_BASE_URL}/stock-analysis/${ticker}/${exchangeCode}/notes`
+    )
+    return handleResponse<StockNoteDto[]>(response)
+  },
+
+  async createStockNote(
+    ticker: string,
+    exchangeCode: string,
+    content: string
+  ): Promise<StockNoteDto> {
+    const response = await fetch(
+      `${API_BASE_URL}/stock-analysis/${ticker}/${exchangeCode}/notes`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      }
+    )
+    return handleResponse<StockNoteDto>(response)
+  },
+
+  async updateStockNote(id: number, content: string): Promise<StockNoteDto> {
+    const response = await fetch(
+      `${API_BASE_URL}/stock-analysis/notes/${id}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      }
+    )
+    return handleResponse<StockNoteDto>(response)
+  },
+
+  async deleteStockNote(id: number): Promise<void> {
+    await fetch(`${API_BASE_URL}/stock-analysis/notes/${id}`, {
+      method: 'DELETE',
+    })
+  },
+
+  // Stock Analysis - Key-Values
+  async getStockKeyValues(ticker: string, exchangeCode: string): Promise<StockKeyValueDto[]> {
+    const response = await fetch(
+      `${API_BASE_URL}/stock-analysis/${ticker}/${exchangeCode}/key-values`
+    )
+    return handleResponse<StockKeyValueDto[]>(response)
+  },
+
+  async createStockKeyValue(
+    ticker: string,
+    exchangeCode: string,
+    key: string,
+    value: string
+  ): Promise<StockKeyValueDto> {
+    const response = await fetch(
+      `${API_BASE_URL}/stock-analysis/${ticker}/${exchangeCode}/key-values`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value }),
+      }
+    )
+    return handleResponse<StockKeyValueDto>(response)
+  },
+
+  async updateStockKeyValue(
+    id: number,
+    key: string,
+    value: string
+  ): Promise<StockKeyValueDto> {
+    const response = await fetch(
+      `${API_BASE_URL}/stock-analysis/key-values/${id}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value }),
+      }
+    )
+    return handleResponse<StockKeyValueDto>(response)
+  },
+
+  async deleteStockKeyValue(id: number): Promise<void> {
+    await fetch(`${API_BASE_URL}/stock-analysis/key-values/${id}`, {
+      method: 'DELETE',
+    })
   },
 }
 

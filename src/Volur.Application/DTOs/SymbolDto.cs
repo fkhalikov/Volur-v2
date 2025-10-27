@@ -20,6 +20,7 @@ public sealed record SymbolDto(
     double? ChangePercent = null,
     string? Sector = null,
     string? Industry = null,
-    DateTime? FundamentalsFetchedAt = null
+    DateTime? FundamentalsFetchedAt = null,
+    bool HasNoBuyStatus = false
 );
 

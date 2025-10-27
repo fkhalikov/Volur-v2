@@ -20,6 +20,7 @@ public sealed class GetSymbolsHandler
     private readonly IExchangeRepository _exchangeRepository;
     private readonly IStockDataRepository _stockDataRepository;
     private readonly IStockDataProvider _stockDataProvider;
+    private readonly IStockAnalysisRepository _stockAnalysisRepository;
     private readonly IEodhdClient _eodhdClient;
     private readonly ILogger<GetSymbolsHandler> _logger;
     private readonly CacheTtlOptions _cacheTtl;
@@ -29,6 +30,7 @@ public sealed class GetSymbolsHandler
         IExchangeRepository exchangeRepository,
         IStockDataRepository stockDataRepository,
         IStockDataProvider stockDataProvider,
+        IStockAnalysisRepository stockAnalysisRepository,
         IEodhdClient eodhdClient,
         ILogger<GetSymbolsHandler> logger,
         IOptions<CacheTtlOptions> cacheTtl)
@@ -37,6 +39,7 @@ public sealed class GetSymbolsHandler
         _exchangeRepository = exchangeRepository;
         _stockDataRepository = stockDataRepository;
         _stockDataProvider = stockDataProvider;
+        _stockAnalysisRepository = stockAnalysisRepository;
         _eodhdClient = eodhdClient;
         _logger = logger;
         _cacheTtl = cacheTtl.Value;
@@ -351,10 +354,23 @@ public sealed class GetSymbolsHandler
                 _logger.LogDebug("Symbol {Ticker}: Quote={HasQuote}, Fundamentals={HasFundamentals}", 
                     symbol.Ticker, quoteResult?.quote != null, fundamentalsResult?.fundamentals != null);
 
+                // Check for NoBuy status in stock analysis
+                var hasNoBuyStatus = false;
+                try
+                {
+                    var keyValues = await _stockAnalysisRepository.GetKeyValuesAsync(symbol.Ticker, symbol.ExchangeCode, cancellationToken);
+                    hasNoBuyStatus = keyValues.Any(kv => kv.Key == "Status" && kv.Value == "NoBuy");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to check NoBuy status for {Ticker}", symbol.Ticker);
+                }
+
                 return symbol.ToDto(
                     quote: quoteResult?.quote,
                     fundamentals: fundamentalsResult?.fundamentals,
-                    fundamentalsFetchedAt: fundamentalsResult?.fetchedAt
+                    fundamentalsFetchedAt: fundamentalsResult?.fetchedAt,
+                    hasNoBuyStatus: hasNoBuyStatus
                 );
             }
             catch (Exception ex)

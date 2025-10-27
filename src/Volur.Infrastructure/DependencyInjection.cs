@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Volur.Application.Configuration;
@@ -19,14 +20,21 @@ public static class DependencyInjection
         // Configuration
         services.Configure<MongoOptions>(configuration.GetSection(MongoOptions.SectionName));
         services.Configure<EodhdOptions>(configuration.GetSection(EodhdOptions.SectionName));
+        services.Configure<SqlServerOptions>(configuration.GetSection(SqlServerOptions.SectionName));
 
         // MongoDB
         services.AddSingleton<MongoDbContext>();
+
+        // SQL Server EF Core
+        var sqlServerOptions = configuration.GetSection(SqlServerOptions.SectionName).Get<SqlServerOptions>();
+        services.AddDbContext<VolurDbContext>(options =>
+            options.UseSqlServer(sqlServerOptions?.ConnectionString ?? "Server=.\\SQLEXPRESS;Database=Volur;Trusted_Connection=True;TrustServerCertificate=True;"));
 
         // Repositories
         services.AddScoped<IExchangeRepository, ExchangeRepository>();
         services.AddScoped<ISymbolRepository, SymbolRepository>();
         services.AddScoped<IStockDataRepository, StockDataRepository>();
+        services.AddScoped<IStockAnalysisRepository, StockAnalysisRepository>();
 
         // Stock Data Provider
         services.AddScoped<IStockDataProvider, EodhdStockDataProvider>();

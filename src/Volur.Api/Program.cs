@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Volur.Application;
 using Volur.Infrastructure;
@@ -72,6 +73,22 @@ using (var scope = app.Services.CreateScope())
     catch (Exception ex)
     {
         Log.Error(ex, "Failed to initialize MongoDB indexes");
+        throw;
+    }
+}
+
+// Ensure SQL Server database exists on startup
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var sqlContext = scope.ServiceProvider.GetRequiredService<VolurDbContext>();
+        await sqlContext.Database.MigrateAsync();
+        Log.Information("SQL Server database initialized successfully");
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Failed to initialize SQL Server database");
         throw;
     }
 }

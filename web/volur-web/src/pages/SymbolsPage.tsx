@@ -409,7 +409,11 @@ export default function SymbolsPage() {
                 {data.items.map((symbol) => (
                   <tr 
                     key={symbol.fullSymbol} 
-                    className="hover:bg-slate-700 cursor-pointer transition-colors"
+                    className={`cursor-pointer transition-colors ${
+                      symbol.hasNoBuyStatus 
+                        ? 'bg-red-900/30 hover:bg-red-900/40 border-l-4 border-red-500' 
+                        : 'hover:bg-slate-700'
+                    }`}
                     onClick={() => handleSymbolClick(symbol.ticker)}
                     title="Click to view stock details"
                   >

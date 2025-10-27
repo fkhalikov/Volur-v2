@@ -20,17 +20,18 @@ public static class SymbolMapper
         IsActive: dto.IsDelisted is false || dto.IsDelisted is null
     );
 
-    public static SymbolDto ToDto(this Symbol entity) => new(
+    public static SymbolDto ToDto(this Symbol entity, bool hasNoBuyStatus = false) => new(
         Ticker: entity.Ticker,
         FullSymbol: entity.FullSymbol,
         Name: entity.Name,
         Type: entity.Type,
         Currency: entity.Currency,
         Isin: entity.Isin,
-        IsActive: entity.IsActive
+        IsActive: entity.IsActive,
+        HasNoBuyStatus: hasNoBuyStatus
     );
 
-    public static SymbolDto ToDto(this Symbol entity, StockQuoteDto? quote, StockFundamentalsDto? fundamentals, DateTime? fundamentalsFetchedAt) => new(
+    public static SymbolDto ToDto(this Symbol entity, StockQuoteDto? quote, StockFundamentalsDto? fundamentals, DateTime? fundamentalsFetchedAt, bool hasNoBuyStatus = false) => new(
         Ticker: entity.Ticker,
         FullSymbol: entity.FullSymbol,
         Name: entity.Name,
@@ -45,7 +46,8 @@ public static class SymbolMapper
         ChangePercent: quote?.ChangePercent,
         Sector: fundamentals?.Sector,
         Industry: fundamentals?.Industry,
-        FundamentalsFetchedAt: fundamentalsFetchedAt
+        FundamentalsFetchedAt: fundamentalsFetchedAt,
+        HasNoBuyStatus: hasNoBuyStatus
     );
 }
 
