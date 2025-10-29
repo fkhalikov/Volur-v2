@@ -39,5 +39,19 @@ public interface ISymbolRepository
     /// Gets all symbols for an exchange without pagination.
     /// </summary>
     Task<(IReadOnlyList<Symbol> symbols, int totalCount, DateTime? fetchedAt)?> GetAllByExchangeAsync(string exchangeCode, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates denormalized sorting fields for a symbol when fundamentals/quote data changes.
+    /// </summary>
+    Task UpdateDenormalizedFieldsAsync(
+        string ticker, 
+        double? trailingPE = null,
+        double? marketCap = null,
+        double? currentPrice = null,
+        double? changePercent = null,
+        double? dividendYield = null,
+        string? sector = null,
+        string? industry = null,
+        CancellationToken cancellationToken = default);
 }
 

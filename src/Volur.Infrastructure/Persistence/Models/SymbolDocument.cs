@@ -23,5 +23,14 @@ public sealed class SymbolDocument
     public bool IsActive { get; set; }
     public DateTime FetchedAt { get; set; }
     public DateTime ExpiresAt { get; set; }
+    
+    // Denormalized fields for efficient sorting (updated when fundamentals/quotes change)
+    public double? TrailingPE { get; set; }
+    public double? MarketCap { get; set; }
+    public double? CurrentPrice { get; set; }
+    public double? ChangePercent { get; set; }
+    public double? DividendYield { get; set; }
+    public string? Sector { get; set; }
+    public string? Industry { get; set; }
 }
 

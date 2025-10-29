@@ -14,11 +14,16 @@ public sealed class StockDataRepository : IStockDataRepository
 {
     private readonly MongoDbContext _context;
     private readonly ILogger<StockDataRepository> _logger;
+    private readonly ISymbolRepository _symbolRepository;
 
-    public StockDataRepository(MongoDbContext context, ILogger<StockDataRepository> logger)
+    public StockDataRepository(
+        MongoDbContext context, 
+        ILogger<StockDataRepository> logger,
+        ISymbolRepository symbolRepository)
     {
         _context = context;
         _logger = logger;
+        _symbolRepository = symbolRepository;
     }
 
     public async Task<(StockQuoteDto quote, DateTime fetchedAt)?> GetQuoteAsync(string ticker, CancellationToken cancellationToken = default)
@@ -73,6 +78,20 @@ public sealed class StockDataRepository : IStockDataRepository
                 update, 
                 new UpdateOptions { IsUpsert = true }, 
                 cancellationToken);
+
+            // Update denormalized fields in SymbolDocument for efficient sorting (best-effort, don't fail if this fails)
+            try
+            {
+                await _symbolRepository.UpdateDenormalizedFieldsAsync(
+                    quote.Ticker,
+                    currentPrice: quote.CurrentPrice,
+                    changePercent: quote.ChangePercent,
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to update denormalized fields for {Ticker} after quote update", quote.Ticker);
+            }
 
             _logger.LogDebug("Cached quote for {Ticker}", quote.Ticker);
         }
@@ -163,6 +182,23 @@ public sealed class StockDataRepository : IStockDataRepository
                 update, 
                 new UpdateOptions { IsUpsert = true }, 
                 cancellationToken);
+
+            // Update denormalized fields in SymbolDocument for efficient sorting (best-effort, don't fail if this fails)
+            try
+            {
+                await _symbolRepository.UpdateDenormalizedFieldsAsync(
+                    fundamentals.Ticker,
+                    trailingPE: fundamentals.TrailingPE,
+                    marketCap: fundamentals.MarketCap,
+                    dividendYield: fundamentals.DividendYield,
+                    sector: fundamentals.Sector,
+                    industry: fundamentals.Industry,
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to update denormalized fields for {Ticker} after fundamentals update", fundamentals.Ticker);
+            }
 
             _logger.LogDebug("Cached fundamentals for {Ticker}", fundamentals.Ticker);
         }

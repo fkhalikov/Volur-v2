@@ -8,10 +8,16 @@ using Volur.Api.Middleware;
 var builder = WebApplication.CreateBuilder(args);
 
 // Serilog configuration
+var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "volur-.log");
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
     .WriteTo.Console()
+    .WriteTo.File(
+        path: logPath,
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
 builder.Host.UseSerilog();
