@@ -176,6 +176,7 @@ public sealed class StockDataRepository : IStockDataRepository, IDisposable
                 CurrencyName: entity.CurrencyName,
                 Highlights: null, // Not stored separately - individual fields are used
                 Valuation: null, // Not stored separately - individual fields are used
+                SharesStats: null, // Not stored separately - returned from API only
                 Technicals: null, // Not stored separately - individual fields are used
                 SplitsDividends: null, // Not stored separately - individual fields are used
                 Earnings: null, // Not stored separately - individual fields are used

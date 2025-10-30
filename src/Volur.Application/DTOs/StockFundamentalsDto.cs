@@ -56,6 +56,21 @@ public sealed record StockTechnicalsDto(
 );
 
 /// <summary>
+/// Data transfer object for stock shares statistics information.
+/// </summary>
+public sealed record StockSharesStatsDto(
+    long? SharesOutstanding,
+    long? SharesFloat,
+    double? PercentInsiders,
+    double? PercentInstitutions,
+    long? SharesShort,
+    long? SharesShortPriorMonth,
+    double? ShortRatio,
+    double? ShortPercentOutstanding,
+    double? ShortPercentFloat
+);
+
+/// <summary>
 /// Data transfer object for stock splits and dividends information.
 /// </summary>
 public sealed record StockSplitsDividendsDto(
@@ -291,6 +306,7 @@ public sealed record StockFundamentalsDto(
     string? CurrencyName,
     StockHighlightsDto? Highlights,
     StockValuationDto? Valuation,
+    StockSharesStatsDto? SharesStats,
     StockTechnicalsDto? Technicals,
     StockSplitsDividendsDto? SplitsDividends,
     StockEarningsDto? Earnings,

@@ -39,6 +39,7 @@ public sealed record EodhdFundamentalDto(
     [property: JsonPropertyName("General")] EodhdGeneralInfoDto? General,
     [property: JsonPropertyName("Highlights")] EodhdHighlightDto? Highlights,
     [property: JsonPropertyName("Valuation")] EodhdValuationDto? Valuation,
+    [property: JsonPropertyName("SharesStats")] EodhdSharesStatsDto? SharesStats,
     [property: JsonPropertyName("Technicals")] EodhdTechnicalsDto? Technicals,
     [property: JsonPropertyName("SplitsDividends")] EodhdSplitsDividendsDto? SplitsDividends,
     [property: JsonPropertyName("Earnings")] EodhdEarningsDto? Earnings,
@@ -114,6 +115,18 @@ public sealed record EodhdTechnicalsDto(
     [property: JsonPropertyName("52WeekLow")] double? FiftyTwoWeekLow,
     [property: JsonPropertyName("50DayMA")] double? FiftyDayMa,
     [property: JsonPropertyName("200DayMA")] double? TwoHundredDayMa
+);
+
+public sealed record EodhdSharesStatsDto(
+    [property: JsonPropertyName("SharesOutstanding")] long? SharesOutstanding,
+    [property: JsonPropertyName("SharesFloat")] long? SharesFloat,
+    [property: JsonPropertyName("PercentInsiders")] double? PercentInsiders,
+    [property: JsonPropertyName("PercentInstitutions")] double? PercentInstitutions,
+    [property: JsonPropertyName("SharesShort")] long? SharesShort,
+    [property: JsonPropertyName("SharesShortPriorMonth")] long? SharesShortPriorMonth,
+    [property: JsonPropertyName("ShortRatio")] double? ShortRatio,
+    [property: JsonPropertyName("ShortPercentOutstanding")] double? ShortPercentOutstanding,
+    [property: JsonPropertyName("ShortPercentFloat")] double? ShortPercentFloat
 );
 
 public sealed record EodhdSplitsDividendsDto(

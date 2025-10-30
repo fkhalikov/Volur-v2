@@ -345,6 +345,17 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
                 EnterpriseValueRevenue: eodhdFundamentals.Valuation.EnterpriseValueRevenue,
                 EnterpriseValueEbitda: eodhdFundamentals.Valuation.EnterpriseValueEbitda
             ),
+            SharesStats: eodhdFundamentals.SharesStats == null ? null : new StockSharesStatsDto(
+                SharesOutstanding: eodhdFundamentals.SharesStats.SharesOutstanding,
+                SharesFloat: eodhdFundamentals.SharesStats.SharesFloat,
+                PercentInsiders: eodhdFundamentals.SharesStats.PercentInsiders,
+                PercentInstitutions: eodhdFundamentals.SharesStats.PercentInstitutions,
+                SharesShort: eodhdFundamentals.SharesStats.SharesShort,
+                SharesShortPriorMonth: eodhdFundamentals.SharesStats.SharesShortPriorMonth,
+                ShortRatio: eodhdFundamentals.SharesStats.ShortRatio,
+                ShortPercentOutstanding: eodhdFundamentals.SharesStats.ShortPercentOutstanding,
+                ShortPercentFloat: eodhdFundamentals.SharesStats.ShortPercentFloat
+            ),
             Technicals: eodhdFundamentals.Technicals == null ? null : new StockTechnicalsDto(
                 Beta: eodhdFundamentals.Technicals.Beta,
                 FiftyTwoWeekHigh: eodhdFundamentals.Technicals.FiftyTwoWeekHigh,
@@ -513,6 +524,17 @@ public sealed class EodhdStockDataProvider : IStockDataProvider
                 EnterpriseValue: (long?)(marketCap * 1.1),
                 EnterpriseValueRevenue: 2.0 + random.NextDouble() * 8,
                 EnterpriseValueEbitda: 8.0 + random.NextDouble() * 15
+            ),
+            SharesStats: new StockSharesStatsDto(
+                SharesOutstanding: (long?)(100_000_000 + random.NextDouble() * 900_000_000),
+                SharesFloat: (long?)(80_000_000 + random.NextDouble() * 720_000_000),
+                PercentInsiders: random.NextDouble() * 20.0,
+                PercentInstitutions: 20.0 + random.NextDouble() * 60.0,
+                SharesShort: (long?)(random.NextDouble() * 10_000_000),
+                SharesShortPriorMonth: (long?)(random.NextDouble() * 10_000_000),
+                ShortRatio: random.NextDouble() * 5.0,
+                ShortPercentOutstanding: random.NextDouble() * 5.0,
+                ShortPercentFloat: random.NextDouble() * 6.0
             ),
             Technicals: new StockTechnicalsDto(
                 Beta: 0.5 + random.NextDouble() * 2,

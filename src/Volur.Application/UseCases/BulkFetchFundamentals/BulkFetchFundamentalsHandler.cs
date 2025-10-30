@@ -184,10 +184,17 @@ public sealed class BulkFetchFundamentalsHandler
                     }
                 });
 
-                // Wait for batch to complete with limited concurrency (10 concurrent requests)
-                var semaphore = new SemaphoreSlim(10, 10);
-                var limitedTasks = batchTasks.Select(async task =>
+                // Wait for batch to complete with limited concurrency (5 concurrent requests to avoid overwhelming EODHD)
+                var semaphore = new SemaphoreSlim(5, 5);
+                var limitedTasks = batchTasks.Select(async (task, index) =>
                 {
+                    // Add a small delay to stagger requests and avoid overwhelming the API
+                    // Delay increases with index to space out requests
+                    if (index > 0)
+                    {
+                        await Task.Delay(index * 50, cancellationToken); // 50ms delay per request
+                    }
+                    
                     await semaphore.WaitAsync(cancellationToken);
                     try
                     {

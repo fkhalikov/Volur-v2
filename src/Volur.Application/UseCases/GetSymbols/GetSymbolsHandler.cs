@@ -21,6 +21,7 @@ public sealed class GetSymbolsHandler
     private readonly IStockDataRepository _stockDataRepository;
     private readonly IStockDataProvider _stockDataProvider;
     private readonly IStockAnalysisRepository _stockAnalysisRepository;
+    private readonly IStockDataRepositoryFactory _stockDataRepositoryFactory;
     private readonly IEodhdClient _eodhdClient;
     private readonly ILogger<GetSymbolsHandler> _logger;
     private readonly CacheTtlOptions _cacheTtl;
@@ -31,6 +32,7 @@ public sealed class GetSymbolsHandler
         IStockDataRepository stockDataRepository,
         IStockDataProvider stockDataProvider,
         IStockAnalysisRepository stockAnalysisRepository,
+        IStockDataRepositoryFactory stockDataRepositoryFactory,
         IEodhdClient eodhdClient,
         ILogger<GetSymbolsHandler> logger,
         IOptions<CacheTtlOptions> cacheTtl)
@@ -40,6 +42,7 @@ public sealed class GetSymbolsHandler
         _stockDataRepository = stockDataRepository;
         _stockDataProvider = stockDataProvider;
         _stockAnalysisRepository = stockAnalysisRepository;
+        _stockDataRepositoryFactory = stockDataRepositoryFactory;
         _eodhdClient = eodhdClient;
         _logger = logger;
         _cacheTtl = cacheTtl.Value;
@@ -345,9 +348,11 @@ public sealed class GetSymbolsHandler
                             var freshQuote = freshQuoteResult.Value;
                             
                             // Cache the fresh quote data for future requests
+                            // Use a separate repository instance to avoid DbContext concurrency issues
                             try
                             {
-                                await _stockDataRepository.UpsertQuoteAsync(freshQuote, cancellationToken);
+                                using var stockDataRepo = _stockDataRepositoryFactory.Create();
+                                await stockDataRepo.UpsertQuoteAsync(freshQuote, cancellationToken);
                                 _logger.LogDebug("Cached fresh quote for {Ticker}", symbol.Ticker);
                             }
                             catch (Exception cacheEx)
