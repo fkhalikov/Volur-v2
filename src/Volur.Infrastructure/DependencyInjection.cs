@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -44,6 +45,15 @@ public static class DependencyInjection
 
         // Stock Data Provider
         services.AddScoped<IStockDataProvider, EodhdStockDataProvider>();
+
+        // EODHD Rate Limiter - 500 requests per minute, shared across all instances
+        services.AddSingleton<RateLimiter>(_ => new TokenBucketRateLimiter(new TokenBucketRateLimiterOptions
+        {
+            TokenLimit = 500,
+            ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+            TokensPerPeriod = 500,
+            AutoReplenishment = true
+        }));
 
         // EODHD HTTP Client
         var eodhdOptions = configuration.GetSection(EodhdOptions.SectionName).Get<EodhdOptions>();

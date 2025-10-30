@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Threading.RateLimiting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Volur.Application.Configuration;
@@ -13,17 +14,19 @@ namespace Volur.Infrastructure.ExternalProviders;
 /// <summary>
 /// HTTP client for EODHD market data API.
 /// </summary>
-public sealed class EodhdClient : IEodhdClient
+public sealed class EodhdClient : IEodhdClient, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<EodhdClient> _logger;
     private readonly EodhdOptions _options;
+    private readonly RateLimiter _rateLimiter;
 
-    public EodhdClient(HttpClient httpClient, IOptions<EodhdOptions> options, ILogger<EodhdClient> logger)
+    public EodhdClient(HttpClient httpClient, IOptions<EodhdOptions> options, ILogger<EodhdClient> logger, RateLimiter rateLimiter)
     {
         _httpClient = httpClient;
         _logger = logger;
         _options = options.Value;
+        _rateLimiter = rateLimiter;
     }
 
     public async Task<Result<IReadOnlyList<EodhdExchangeDto>>> GetExchangesAsync(CancellationToken cancellationToken = default)
@@ -84,6 +87,26 @@ public sealed class EodhdClient : IEodhdClient
 
         try
         {
+            // Wait for rate limit permit before making request
+            // AcquireAsync will wait until tokens are available (up to 1 minute for replenishment)
+            var waitStartTime = DateTime.UtcNow;
+            using var lease = await _rateLimiter.AcquireAsync(permitCount: 1, cancellationToken);
+            
+            // Only check IsAcquired for cancellation - AcquireAsync waits indefinitely for tokens
+            if (!lease.IsAcquired)
+            {
+                // This only happens if cancellation was requested
+                _logger.LogInformation("EODHD rate limit permit acquisition cancelled for {Endpoint}", endpoint);
+                throw new OperationCanceledException("Request was cancelled while waiting for rate limit permit", cancellationToken);
+            }
+
+            var waitTime = DateTime.UtcNow - waitStartTime;
+            if (waitTime.TotalMilliseconds > 100)
+            {
+                _logger.LogInformation("EODHD rate limit wait completed: waited {WaitMs}ms for permit for {Endpoint}", 
+                    waitTime.TotalMilliseconds, endpoint);
+            }
+
             _logger.LogInformation("Requesting EODHD: {Endpoint}", endpoint);
 
             var response = await _httpClient.GetAsync(url, cancellationToken);
@@ -137,9 +160,24 @@ public sealed class EodhdClient : IEodhdClient
         }
         catch (TaskCanceledException)
         {
+            // HTTP client timeout
             var elapsed = DateTime.UtcNow - startTime;
             _logger.LogWarning("EODHD request timeout: {Endpoint} ({ElapsedMs}ms)", endpoint, elapsed.TotalMilliseconds);
             return Result.Failure<IReadOnlyList<T>>(Error.ProviderUnavailable("Request timeout."));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Request was cancelled while waiting for rate limit or during request
+            var elapsed = DateTime.UtcNow - startTime;
+            _logger.LogInformation("EODHD request cancelled: {Endpoint} ({ElapsedMs}ms)", endpoint, elapsed.TotalMilliseconds);
+            throw; // Re-throw cancellation to propagate properly
+        }
+        catch (OperationCanceledException)
+        {
+            // Other cancellation scenarios (timeout, etc.)
+            var elapsed = DateTime.UtcNow - startTime;
+            _logger.LogWarning("EODHD request cancelled/timeout: {Endpoint} ({ElapsedMs}ms)", endpoint, elapsed.TotalMilliseconds);
+            return Result.Failure<IReadOnlyList<T>>(Error.ProviderUnavailable("Request cancelled or timed out."));
         }
         catch (HttpRequestException ex)
         {
@@ -161,6 +199,15 @@ public sealed class EodhdClient : IEodhdClient
 
         try
         {
+            // Wait for rate limit permit before making request
+            using var lease = await _rateLimiter.AcquireAsync(permitCount: 1, cancellationToken);
+            
+            if (!lease.IsAcquired)
+            {
+                _logger.LogWarning("EODHD rate limit permit not acquired for {Endpoint} (timeout or cancelled)", endpoint);
+                return Result.Failure<T>(Error.ProviderRateLimit("Rate limit permit not available. Please try again later."));
+            }
+
             _logger.LogInformation("Requesting EODHD: {Endpoint}", endpoint);
 
             var response = await _httpClient.GetAsync(url, cancellationToken);
@@ -250,6 +297,12 @@ public sealed class EodhdClient : IEodhdClient
                content.Contains("maximum requests") ||
                content.Contains("per day") ||
                content.Contains("daily limit");
+    }
+
+    public void Dispose()
+    {
+        // Rate limiter is injected as a singleton and managed by DI container
+        // Do not dispose it here as it's shared across all instances
     }
 }
 
