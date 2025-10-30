@@ -36,13 +36,13 @@ public sealed record EodhdHistoricalPriceDto(
 /// EODHD fundamental data response.
 /// </summary>
 public sealed record EodhdFundamentalDto(
-    [property: JsonPropertyName("General")] EodhdGeneralInfoDto General,
-    [property: JsonPropertyName("Highlights")] EodhdHighlightDto Highlights,
-    [property: JsonPropertyName("Valuation")] EodhdValuationDto Valuation,
-    [property: JsonPropertyName("Technicals")] EodhdTechnicalsDto Technicals,
-    [property: JsonPropertyName("SplitsDividends")] EodhdSplitsDividendsDto SplitsDividends,
-    [property: JsonPropertyName("Earnings")] EodhdEarningsDto Earnings,
-    [property: JsonPropertyName("Financials")] EodhdFinancialsDto Financials
+    [property: JsonPropertyName("General")] EodhdGeneralInfoDto? General,
+    [property: JsonPropertyName("Highlights")] EodhdHighlightDto? Highlights,
+    [property: JsonPropertyName("Valuation")] EodhdValuationDto? Valuation,
+    [property: JsonPropertyName("Technicals")] EodhdTechnicalsDto? Technicals,
+    [property: JsonPropertyName("SplitsDividends")] EodhdSplitsDividendsDto? SplitsDividends,
+    [property: JsonPropertyName("Earnings")] EodhdEarningsDto? Earnings,
+    [property: JsonPropertyName("Financials")] EodhdFinancialsDto? Financials
 );
 
 public sealed record EodhdGeneralInfoDto(

@@ -6,7 +6,7 @@ This guide covers everything you need to know to develop and contribute to Volur
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Node.js 20+](https://nodejs.org/)
-- [MongoDB 7.0+](https://www.mongodb.com/try/download/community)
+- [SQL Server 2022 Developer or container](https://www.microsoft.com/sql-server/sql-server-downloads)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop) (optional)
 - IDE: Visual Studio 2022, VS Code, or Rider
 
@@ -31,8 +31,7 @@ dotnet restore
 cd src/Volur.Api
 dotnet user-secrets init
 dotnet user-secrets set "Eodhd:ApiToken" "YOUR_EODHD_API_TOKEN"
-dotnet user-secrets set "Mongo:ConnectionString" "mongodb://localhost:27017"
-dotnet user-secrets set "Mongo:Database" "volur_dev"
+dotnet user-secrets set "SqlServer:ConnectionString" "Server=.\\SQLEXPRESS;Database=Volur;Trusted_Connection=True;TrustServerCertificate=True;"
 ```
 
 #### Or use appsettings.Development.json
@@ -41,13 +40,9 @@ cp appsettings.Development.json.example appsettings.Development.json
 # Edit the file and add your API token
 ```
 
-#### Run MongoDB locally
+#### Run SQL Server locally
 ```bash
-# Using Docker
-docker run -d -p 27017:27017 --name volur-mongo mongo:7.0
-
-# Or install MongoDB locally and run
-mongod --dbpath /path/to/data
+docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=YourStrong@Passw0rd" -p 1433:1433 --name volur-sql -d mcr.microsoft.com/mssql/server:2022-latest
 ```
 
 #### Run the API
@@ -87,8 +82,8 @@ Volur-v2/
 │   │   ├── Mappers/           # Entity to DTO mappers
 │   │   └── Validators/        # FluentValidation validators
 │   ├── Volur.Infrastructure/  # External concerns
-│   │   ├── Persistence/       # MongoDB repositories
-│   │   │   ├── Models/        # MongoDB documents
+│   │   ├── Persistence/       # EF Core (SQL Server) repositories
+│   │   │   ├── Models/        # EF Core entities/configurations
 │   │   │   └── Repositories/  # Repository implementations
 │   │   └── ExternalProviders/ # EODHD HTTP client
 │   └── Volur.Api/            # Web API
@@ -136,7 +131,7 @@ dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
 dotnet format
 ```
 
-#### Add a new migration (if using EF Core in future)
+#### Add a new EF Core migration
 ```bash
 dotnet ef migrations add <MigrationName> --project src/Volur.Infrastructure --startup-project src/Volur.Api
 ```
@@ -307,7 +302,7 @@ Set log level in appsettings.Development.json:
 
 ### Reading Log Files for Backend Issues
 
-The backend writes log files automatically when running. This is essential for debugging MongoDB issues, API errors, and data loading problems.
+The backend writes log files automatically when running. This is essential for debugging SQL Server issues, API errors, and data loading problems.
 
 #### Log File Location
 
@@ -333,8 +328,8 @@ Get-Content "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Wait -Tail 50
 # Search for errors
 Select-String -Path "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Pattern "ERR"
 
-# Search for MongoDB errors specifically
-Select-String -Path "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Pattern "MongoDB|Failed to get"
+# Search for SQL Server errors specifically
+Select-String -Path "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Pattern "SqlException|SQL Server|Failed to initialize SQL Server"
 ```
 
 **Linux/Mac:**
@@ -348,8 +343,8 @@ tail -f src/Volur.Api/bin/Debug/net8.0/logs/volur-*.log
 # Search for errors
 grep -i "ERR" src/Volur.Api/bin/Debug/net8.0/logs/volur-*.log
 
-# Search for MongoDB errors
-grep -i "MongoDB\|Failed to get" src/Volur.Api/bin/Debug/net8.0/logs/volur-*.log
+# Search for SQL Server errors
+grep -i "SqlException\|SQL Server\|Failed to initialize SQL Server" src/Volur.Api/bin/Debug/net8.0/logs/volur-*.log
 ```
 
 #### Testing Endpoints and Checking Logs
@@ -369,7 +364,7 @@ curl http://localhost:5000/api/exchanges/LSE/symbols?page=1&pageSize=50
 Get-Content "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Tail 50
 ```
 
-#### Common MongoDB Error Patterns
+#### Common SQL Server Error Patterns
 
 **1. MongoDB LINQ Expression Not Supported**
 ```
@@ -414,9 +409,8 @@ Each log entry contains:
 
 Example log entry:
 ```
-2025-10-29 20:16:10.146 +00:00 [INF] Querying MongoDB for symbols with ParentExchange=LSE (normalized to LSE), TypeFilter=none, SortBy=pe, SearchQuery=none
-2025-10-29 20:16:10.166 +00:00 [INF] MongoDB query returned totalCount=3146 for LSE
-2025-10-29 20:16:10.212 +00:00 [ERR] Failed to get symbols for LSE from MongoDB
+2025-10-29 20:16:10.146 +00:00 [INF] Querying SQL Server for symbols with ParentExchange=LSE, TypeFilter=none, SortBy=pe, SearchQuery=none
+2025-10-29 20:16:10.166 +00:00 [INF] SQL query returned totalCount=3146 for LSE
 ```
 
 #### Debugging Workflow
@@ -425,13 +419,7 @@ Example log entry:
 2. **Check console output**: Look for errors in the running application console
 3. **Read log file**: Check the most recent log file for detailed errors
 4. **Search for specific patterns**: Use grep/Select-String to find relevant errors
-5. **Check MongoDB directly** (if needed):
-   ```bash
-   mongosh
-   use volur
-   db.symbols.countDocuments({ ParentExchange: "LSE" })
-   db.symbols.find({ ParentExchange: "LSE" }).limit(5)
-   ```
+5. **Inspect database** (if needed): use SSMS/Azure Data Studio to query tables
 
 #### Debugging MongoDB Query Issues
 
@@ -554,14 +542,11 @@ MongoDB.Driver.Linq.ExpressionNotSupportedException: Expression not supported...
 
 ## Troubleshooting
 
-### MongoDB connection issues
+### SQL Server connectivity issues
 ```bash
-# Check if MongoDB is running
-mongosh
-
-# If using Docker
-docker ps | grep mongo
-docker logs volur-mongo
+# Verify container is running
+docker ps | grep mssql
+docker logs volur-sql
 ```
 
 ### API not starting
@@ -586,7 +571,7 @@ dotnet clean
 dotnet build
 dotnet test
 
-# Check MongoDB is running for integration tests
+# Ensure SQL Server is reachable for integration tests
 ```
 
 ## Performance Tips

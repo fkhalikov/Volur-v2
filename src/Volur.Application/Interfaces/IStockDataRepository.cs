@@ -5,7 +5,7 @@ namespace Volur.Application.Interfaces;
 /// <summary>
 /// Repository interface for stock data caching operations.
 /// </summary>
-public interface IStockDataRepository
+public interface IStockDataRepository : IDisposable
 {
     /// <summary>
     /// Gets cached stock quote data for a ticker.

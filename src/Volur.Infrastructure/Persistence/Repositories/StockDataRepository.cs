@@ -10,7 +10,7 @@ namespace Volur.Infrastructure.Persistence.Repositories;
 /// <summary>
 /// EF Core implementation of stock data repository.
 /// </summary>
-public sealed class StockDataRepository : IStockDataRepository
+public sealed class StockDataRepository : IStockDataRepository, IDisposable
 {
     private readonly VolurDbContext _context;
     private readonly ILogger<StockDataRepository> _logger;
@@ -24,6 +24,11 @@ public sealed class StockDataRepository : IStockDataRepository
         _context = context;
         _logger = logger;
         _symbolRepository = symbolRepository;
+    }
+
+    public void Dispose()
+    {
+        _context?.Dispose();
     }
 
     public async Task<(StockQuoteDto quote, DateTime fetchedAt)?> GetQuoteAsync(string ticker, CancellationToken cancellationToken = default)
@@ -69,7 +74,13 @@ public sealed class StockDataRepository : IStockDataRepository
         try
         {
             var ticker = quote.Ticker.ToUpperInvariant();
-            var entity = await _context.StockQuotes
+
+            // Try to get an already tracked entity for this ticker to avoid duplicate tracking issues
+            var trackedEntry = _context.ChangeTracker
+                .Entries<StockQuoteEntity>()
+                .FirstOrDefault(e => e.Entity.Ticker == ticker);
+
+            var entity = trackedEntry?.Entity ?? await _context.StockQuotes
                 .FirstOrDefaultAsync(q => q.Ticker == ticker, cancellationToken);
 
             if (entity != null)
@@ -89,6 +100,14 @@ public sealed class StockDataRepository : IStockDataRepository
             else
             {
                 // Insert new
+                // Ensure no other instance with the same key is tracked
+                var duplicateTracked = _context.ChangeTracker
+                    .Entries<StockQuoteEntity>()
+                    .FirstOrDefault(e => e.Entity.Id == 0 && e.Entity.Ticker == ticker);
+                if (duplicateTracked != null)
+                {
+                    duplicateTracked.State = EntityState.Detached;
+                }
                 entity = new StockQuoteEntity
                 {
                     Ticker = ticker,
@@ -211,7 +230,12 @@ public sealed class StockDataRepository : IStockDataRepository
         try
         {
             var ticker = fundamentals.Ticker.ToUpperInvariant();
-            var entity = await _context.StockFundamentals
+            // If an instance of fundamentals for this ticker is already being tracked, reuse it
+            var trackedFundamentals = _context.ChangeTracker
+                .Entries<StockFundamentalsEntity>()
+                .FirstOrDefault(e => e.Entity.Ticker == ticker)?.Entity;
+
+            var entity = trackedFundamentals ?? await _context.StockFundamentals
                 .FirstOrDefaultAsync(f => f.Ticker == ticker, cancellationToken);
 
             if (entity != null)
@@ -262,6 +286,14 @@ public sealed class StockDataRepository : IStockDataRepository
             else
             {
                 // Insert new
+                // Ensure we are not adding a duplicate tracked instance for the same ticker
+                var duplicateTracked = _context.ChangeTracker
+                    .Entries<StockFundamentalsEntity>()
+                    .FirstOrDefault(e => e.Entity.Id == 0 && e.Entity.Ticker == ticker);
+                if (duplicateTracked != null)
+                {
+                    duplicateTracked.State = EntityState.Detached;
+                }
                 entity = new StockFundamentalsEntity
                 {
                     Ticker = ticker,

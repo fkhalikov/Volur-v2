@@ -60,11 +60,11 @@ public sealed record StockTechnicalsDto(
 /// </summary>
 public sealed record StockSplitsDividendsDto(
     double? PayoutRatio,
-    double? DividendDate,
-    double? ExDividendDate,
+    string? DividendDate,
+    string? ExDividendDate,
     double? DividendPerShare,
     double? DividendYield,
-    double? NumberDividendsByYear
+    int? NumberDividendsByYear
 );
 
 /// <summary>

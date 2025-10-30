@@ -29,11 +29,17 @@ public static class DependencyInjection
             options.UseSqlServer(sqlServerOptions?.ConnectionString ?? "Server=.\\SQLEXPRESS;Database=Volur;Trusted_Connection=True;TrustServerCertificate=True;");
             options.AddInterceptors(new TimestampSaveChangesInterceptor());
         });
+        services.AddDbContextFactory<VolurDbContext>(options =>
+        {
+            options.UseSqlServer(sqlServerOptions?.ConnectionString ?? "Server=.\\SQLEXPRESS;Database=Volur;Trusted_Connection=True;TrustServerCertificate=True;");
+            options.AddInterceptors(new TimestampSaveChangesInterceptor());
+        }, ServiceLifetime.Scoped);
 
         // Repositories
         services.AddScoped<IExchangeRepository, ExchangeRepository>();
         services.AddScoped<ISymbolRepository, SymbolRepository>();
         services.AddScoped<IStockDataRepository, StockDataRepository>();
+        services.AddScoped<IStockDataRepositoryFactory, StockDataRepositoryFactory>();
         services.AddScoped<IStockAnalysisRepository, StockAnalysisRepository>();
 
         // Stock Data Provider

@@ -1,6 +1,6 @@
 # Volur - Market Data Platform
 
-A modern, scalable financial market data platform built with .NET 8, React, TypeScript, and MongoDB. Volur fetches and caches exchange and symbol data from EODHD API with intelligent TTL-based caching.
+A modern, scalable financial market data platform built with .NET 8, React, TypeScript, and SQL Server. Volur fetches and caches exchange and symbol data from EODHD API with intelligent TTL-based caching.
 
 ## 🏗️ Architecture
 
@@ -18,8 +18,8 @@ A modern, scalable financial market data platform built with .NET 8, React, Type
 - **Tailwind CSS** for modern, responsive UI
 
 ### Data Layer
-- **MongoDB** with TTL-based caching
-- Automatic index creation on startup
+- **SQL Server (EF Core)** with TTL-based caching persisted in relational tables
+- Automatic migrations applied on startup
 - Optimized queries with pagination and search
 
 ## 📋 Features
@@ -42,7 +42,7 @@ A modern, scalable financial market data platform built with .NET 8, React, Type
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Node.js 18+](https://nodejs.org/)
-- [MongoDB](https://www.mongodb.com/try/download/community) (or use Docker)
+- [SQL Server Developer Edition](https://www.microsoft.com/sql-server/sql-server-downloads) (or use Docker)
 - [EODHD API Token](https://eodhd.com/) (free tier available)
 
 ### Option 1: Docker Compose (Recommended)
@@ -87,10 +87,12 @@ A modern, scalable financial market data platform built with .NET 8, React, Type
    dotnet user-secrets set "Eodhd:ApiToken" "YOUR_TOKEN_HERE"
    ```
 
-2. **Start MongoDB** (if not using Docker)
-   ```bash
-   mongod --dbpath /path/to/data
-   ```
+2. **Start SQL Server** (if not using Docker)
+```bash
+# Windows: install SQL Server Developer + SQL Server Management Studio
+# Or run with Docker
+docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=YourStrong@Passw0rd" -p 1433:1433 --name volur-sql -d mcr.microsoft.com/mssql/server:2022-latest
+```
 
 3. **Run the API**
    ```bash
@@ -121,9 +123,8 @@ A modern, scalable financial market data platform built with .NET 8, React, Type
 
 ```json
 {
-  "Mongo": {
-    "ConnectionString": "mongodb://localhost:27017",
-    "Database": "volur"
+  "SqlServer": {
+    "ConnectionString": "Server=.\\SQLEXPRESS;Database=Volur;Trusted_Connection=True;TrustServerCertificate=True;"
   },
   "Eodhd": {
     "ApiToken": "YOUR_TOKEN",
@@ -145,8 +146,8 @@ A modern, scalable financial market data platform built with .NET 8, React, Type
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `EODHD_API_TOKEN` | EODHD API token (required) | - |
-| `Mongo__ConnectionString` | MongoDB connection string | `mongodb://localhost:27017` |
-| `Mongo__Database` | Database name | `volur` |
+| `SA_PASSWORD` | SQL Server SA password (Docker) | `YourStrong@Passw0rd` |
+| `SqlServer__ConnectionString` | API SQL Server connection string | `Server=.\\SQLEXPRESS;...` |
 | `CacheTtl__ExchangesHours` | Exchange cache TTL in hours | `24` |
 | `CacheTtl__SymbolsHours` | Symbol cache TTL in hours | `24` |
 
@@ -175,7 +176,7 @@ Get all exchanges with optional force refresh.
   ],
   "fetchedAt": "2025-10-13T17:30:12Z",
   "cache": {
-    "source": "mongo",
+  "source": "sql",
     "ttlSeconds": 86340
   }
 }
@@ -221,7 +222,7 @@ Get symbols for a specific exchange with pagination and search.
   ],
   "fetchedAt": "2025-10-13T17:33:00Z",
   "cache": {
-    "source": "mongo",
+  "source": "sql",
     "ttlSeconds": 86340
   }
 }
@@ -314,7 +315,7 @@ Volur-v2/
 ### Production Considerations
 
 - Use a secrets manager for API tokens (Azure Key Vault, AWS Secrets Manager)
-- Set up proper MongoDB backups
+- Configure SQL Server backups/HA
 - Configure application insights/monitoring (Prometheus, Grafana)
 - Use a reverse proxy (nginx, Traefik) for SSL termination
 - Implement rate limiting on the API gateway
@@ -325,7 +326,7 @@ Volur-v2/
 ### Health Checks
 
 - **Liveness:** `GET /api/health` - Returns 200 if process is running
-- **Readiness:** `GET /api/ready` - Checks MongoDB connectivity and upstream availability
+- **Readiness:** `GET /api/ready` - Checks API readiness
 
 ### Logging
 

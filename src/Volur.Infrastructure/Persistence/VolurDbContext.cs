@@ -72,7 +72,7 @@ public sealed class VolurDbContext : DbContext
             entity.HasKey(e => e.Code);
             entity.Property(e => e.Code).IsRequired().HasMaxLength(20);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.OperatingMic).HasMaxLength(10);
+            entity.Property(e => e.OperatingMic).HasMaxLength(50);
             entity.Property(e => e.Country).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Currency).IsRequired().HasMaxLength(10);
             

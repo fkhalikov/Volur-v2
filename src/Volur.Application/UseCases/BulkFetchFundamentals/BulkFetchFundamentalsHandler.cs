@@ -12,17 +12,20 @@ public sealed class BulkFetchFundamentalsHandler
     private readonly ISymbolRepository _symbolRepository;
     private readonly IStockDataRepository _stockDataRepository;
     private readonly IStockDataProvider _stockDataProvider;
+    private readonly IStockDataRepositoryFactory _stockDataRepositoryFactory;
     private readonly ILogger<BulkFetchFundamentalsHandler> _logger;
 
     public BulkFetchFundamentalsHandler(
         ISymbolRepository symbolRepository,
         IStockDataRepository stockDataRepository,
         IStockDataProvider stockDataProvider,
+        IStockDataRepositoryFactory stockDataRepositoryFactory,
         ILogger<BulkFetchFundamentalsHandler> logger)
     {
         _symbolRepository = symbolRepository;
         _stockDataRepository = stockDataRepository;
         _stockDataProvider = stockDataProvider;
+        _stockDataRepositoryFactory = stockDataRepositoryFactory;
         _logger = logger;
     }
 
@@ -117,6 +120,8 @@ public sealed class BulkFetchFundamentalsHandler
                 // Process batch in parallel with limited concurrency
                 var batchTasks = batch.Select(async symbol =>
                 {
+                    using var stockDataRepo = _stockDataRepositoryFactory.Create();
+                    
                     try
                     {
                         // Fetch fundamental data from provider
@@ -124,11 +129,11 @@ public sealed class BulkFetchFundamentalsHandler
                         
                         if (fundamentalsResult.IsSuccess)
                         {
-                            // Cache the fundamental data
-                            await _stockDataRepository.UpsertFundamentalsAsync(fundamentalsResult.Value, cancellationToken);
+                            // Cache the fundamental data using the dedicated DbContext
+                            await stockDataRepo.UpsertFundamentalsAsync(fundamentalsResult.Value, cancellationToken);
                             
                             // Remove from no-data-available list if it was there (data is now available)
-                            await _stockDataRepository.RemoveNoDataAvailableAsync(symbol.Ticker, symbol.ExchangeCode, cancellationToken);
+                            await stockDataRepo.RemoveNoDataAvailableAsync(symbol.Ticker, symbol.ExchangeCode, cancellationToken);
                             
                             _logger.LogDebug("Successfully fetched and cached fundamentals for {Ticker}.{ExchangeCode}", symbol.Ticker, symbol.ExchangeCode);
                             return (success: true, isRateLimit: false, isDailyLimit: false);
@@ -154,7 +159,7 @@ public sealed class BulkFetchFundamentalsHandler
                             else
                             {
                                 // Mark as having no data available to avoid future requests
-                                await _stockDataRepository.MarkAsNoDataAvailableAsync(symbol.Ticker, symbol.ExchangeCode, fundamentalsResult.Error?.Message, cancellationToken);
+                                await stockDataRepo.MarkAsNoDataAvailableAsync(symbol.Ticker, symbol.ExchangeCode, fundamentalsResult.Error?.Message, cancellationToken);
                                 
                                 _logger.LogWarning("Failed to fetch fundamentals for {Ticker}.{ExchangeCode}: {Error} - marked as no-data-available", 
                                     symbol.Ticker, symbol.ExchangeCode, fundamentalsResult.Error?.Message);
@@ -165,7 +170,14 @@ public sealed class BulkFetchFundamentalsHandler
                     catch (Exception ex)
                     {
                         // Mark as having no data available due to exception
-                        await _stockDataRepository.MarkAsNoDataAvailableAsync(symbol.Ticker, symbol.ExchangeCode, ex.Message, cancellationToken);
+                        try
+                        {
+                            await stockDataRepo.MarkAsNoDataAvailableAsync(symbol.Ticker, symbol.ExchangeCode, ex.Message, cancellationToken);
+                        }
+                        catch
+                        {
+                            // Ignore errors when marking as no data available
+                        }
                         
                         _logger.LogError(ex, "Error processing symbol {Ticker}.{ExchangeCode} - marked as no-data-available", symbol.Ticker, symbol.ExchangeCode);
                         return (success: false, isRateLimit: false, isDailyLimit: false);
