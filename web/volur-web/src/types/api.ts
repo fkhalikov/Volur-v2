@@ -26,6 +26,7 @@ export interface SymbolDto {
   sector?: string
   industry?: string
   fundamentalsFetchedAt?: string
+  hasNoBuyStatus?: boolean
 }
 
 export interface CacheMetadata {
@@ -378,5 +379,25 @@ export interface ErrorResponse {
     message: string
     traceId: string
   }
+}
+
+// Stock Analysis Types
+export interface StockNoteDto {
+  id: number
+  ticker: string
+  exchangeCode: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface StockKeyValueDto {
+  id: number
+  ticker: string
+  exchangeCode: string
+  key: string
+  value: string
+  createdAt: string
+  updatedAt: string
 }
 

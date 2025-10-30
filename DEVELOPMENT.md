@@ -305,6 +305,171 @@ Set log level in appsettings.Development.json:
 }
 ```
 
+### Reading Log Files for Backend Issues
+
+The backend writes log files automatically when running. This is essential for debugging MongoDB issues, API errors, and data loading problems.
+
+#### Log File Location
+
+**Development/Local:**
+- Path: `src/Volur.Api/bin/Debug/net8.0/logs/volur-YYYYMMDD.log`
+- Format: One file per day (rolling daily)
+- Example: `volur-20251029.log` for October 29, 2025
+
+**Production/Docker:**
+- Path: `logs/volur-YYYYMMDD.log` (inside container)
+- Access via: `docker exec -it volur-api cat logs/volur-$(date +%Y%m%d).log`
+
+#### How to Read Logs
+
+**Windows (PowerShell):**
+```powershell
+# Read the most recent log file
+Get-Content "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Tail 100
+
+# Follow log file in real-time (like tail -f)
+Get-Content "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Wait -Tail 50
+
+# Search for errors
+Select-String -Path "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Pattern "ERR"
+
+# Search for MongoDB errors specifically
+Select-String -Path "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Pattern "MongoDB|Failed to get"
+```
+
+**Linux/Mac:**
+```bash
+# Read the most recent log file
+tail -100 src/Volur.Api/bin/Debug/net8.0/logs/volur-*.log
+
+# Follow log file in real-time
+tail -f src/Volur.Api/bin/Debug/net8.0/logs/volur-*.log
+
+# Search for errors
+grep -i "ERR" src/Volur.Api/bin/Debug/net8.0/logs/volur-*.log
+
+# Search for MongoDB errors
+grep -i "MongoDB\|Failed to get" src/Volur.Api/bin/Debug/net8.0/logs/volur-*.log
+```
+
+#### Testing Endpoints and Checking Logs
+
+**Step 1: Test the endpoint**
+```powershell
+# Test LSE symbols endpoint
+Invoke-RestMethod -Uri "http://localhost:5000/api/exchanges/LSE/symbols?page=1&pageSize=50" -Method Get
+
+# Or use curl
+curl http://localhost:5000/api/exchanges/LSE/symbols?page=1&pageSize=50
+```
+
+**Step 2: Check logs immediately after**
+```powershell
+# Get the latest log entries
+Get-Content "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Tail 50
+```
+
+#### Common MongoDB Error Patterns
+
+**1. MongoDB LINQ Expression Not Supported**
+```
+MongoDB.Driver.Linq.ExpressionNotSupportedException: Expression not supported: (x.Field ?? defaultValue)
+```
+- **Cause**: Using C# null-coalescing operator (`??`) in MongoDB LINQ expressions
+- **Fix**: Remove `??` from sort/filter expressions. MongoDB handles nulls naturally:
+  - Ascending: nulls sort first
+  - Descending: nulls sort last
+
+**2. Connection Issues**
+```
+MongoDB.Driver.MongoConnectionException: Unable to connect to server
+```
+- **Check**: MongoDB is running (`docker ps` or `mongosh`)
+- **Check**: Connection string in `appsettings.json` is correct
+- **Check**: MongoDB port 27017 is accessible
+
+**3. No Documents Found**
+```
+[WRN] No symbols found in MongoDB for LSE with filters
+[WRN] Raw count (no filters, ParentExchange=LSE): 0
+```
+- **Cause**: No data in MongoDB for that exchange
+- **Action**: Check if symbols were fetched from provider
+- **Fix**: Use `forceRefresh=true` to fetch from provider, or check data in MongoDB directly
+
+**4. Query Returning 0 Despite Count > 0**
+```
+[INF] MongoDB query returned totalCount=6201 for LSE
+[ERR] Failed to get symbols for LSE from MongoDB
+```
+- **Cause**: Sort expression error (like the `??` operator issue)
+- **Fix**: Check the sort definition in repository, remove unsupported expressions
+
+#### Log File Structure
+
+Each log entry contains:
+- **Timestamp**: `2025-10-29 20:16:10.166 +00:00`
+- **Log Level**: `[INF]` (Information), `[WRN]` (Warning), `[ERR]` (Error), `[DBG]` (Debug)
+- **Message**: Human-readable log message with structured properties
+
+Example log entry:
+```
+2025-10-29 20:16:10.146 +00:00 [INF] Querying MongoDB for symbols with ParentExchange=LSE (normalized to LSE), TypeFilter=none, SortBy=pe, SearchQuery=none
+2025-10-29 20:16:10.166 +00:00 [INF] MongoDB query returned totalCount=3146 for LSE
+2025-10-29 20:16:10.212 +00:00 [ERR] Failed to get symbols for LSE from MongoDB
+```
+
+#### Debugging Workflow
+
+1. **Reproduce the issue**: Make the API call that's failing
+2. **Check console output**: Look for errors in the running application console
+3. **Read log file**: Check the most recent log file for detailed errors
+4. **Search for specific patterns**: Use grep/Select-String to find relevant errors
+5. **Check MongoDB directly** (if needed):
+   ```bash
+   mongosh
+   use volur
+   db.symbols.countDocuments({ ParentExchange: "LSE" })
+   db.symbols.find({ ParentExchange: "LSE" }).limit(5)
+   ```
+
+#### Debugging MongoDB Query Issues
+
+When debugging MongoDB queries, look for these log patterns:
+
+**Successful Query:**
+```
+[INF] Querying MongoDB for symbols with ParentExchange=LSE...
+[INF] MongoDB query returned totalCount=6201 for LSE
+[INF] MongoDB query returned 50 documents for page 1 of LSE
+[INF] Successfully loaded 50 symbols from MongoDB for LSE, fetchedAt=2025-10-29T20:17:26.021Z
+```
+
+**Failed Query:**
+```
+[INF] Querying MongoDB for symbols with ParentExchange=LSE...
+[INF] MongoDB query returned totalCount=6201 for LSE
+[ERR] Failed to get symbols for LSE from MongoDB
+MongoDB.Driver.Linq.ExpressionNotSupportedException: Expression not supported...
+```
+
+**No Data Found:**
+```
+[INF] Querying MongoDB for symbols with ParentExchange=LSE...
+[INF] MongoDB query returned totalCount=0 for LSE
+[WRN] No symbols found in MongoDB for LSE with filters. Checking raw count and alternative field values...
+[WRN] Raw count (no filters, ParentExchange=LSE): 0
+[WRN] Count by ExchangeCode field (ExchangeCode=LSE): 0
+```
+
+#### Tips for Effective Log Reading
+
+1. **Filter by log level**: Focus on `[ERR]` and `[WRN]` entries first
+2. **Look for patterns**: Same error repeating indicates a systematic issue
+3. **Check timestamps**: Correlate errors with specific API calls
+4. **Read full stack traces**: Error logs include full exception details for MongoDB errors
+5. **Check before/after**: Look for successful operations before the error for context
+
 ### Frontend Debugging
 
 #### Browser DevTools

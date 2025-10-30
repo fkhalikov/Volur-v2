@@ -1,22 +1,25 @@
 version: '3.8'
 
 services:
-  mongodb:
-    image: mongo:7.0
-    container_name: volur-mongodb
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: volur-sqlserver
     ports:
-      - "27017:27017"
+      - "1433:1433"
     environment:
-      MONGO_INITDB_DATABASE: volur
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "${SA_PASSWORD:-YourStrong@Passw0rd}"
+      MSSQL_PID: "Developer"
     volumes:
-      - mongodb_data:/data/db
+      - sqlserver_data:/var/opt/mssql
     networks:
       - volur-network
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/volur --quiet
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "${SA_PASSWORD:-YourStrong@Passw0rd}" -Q "SELECT 1" || exit 1
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   api:
     build:
@@ -28,8 +31,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      Mongo__ConnectionString: mongodb://mongodb:27017
-      Mongo__Database: volur
+      SqlServer__ConnectionString: "Server=sqlserver;Database=Volur;User Id=sa;Password=${SA_PASSWORD:-YourStrong@Passw0rd};TrustServerCertificate=True;"
       Eodhd__ApiToken: ${EODHD_API_TOKEN}
       Eodhd__BaseUrl: https://eodhd.com/
       Eodhd__TimeoutSeconds: 10
@@ -38,7 +40,7 @@ services:
       Cors__AllowedOrigins__0: http://localhost:3000
       Cors__AllowedOrigins__1: http://localhost:5173
     depends_on:
-      mongodb:
+      sqlserver:
         condition: service_healthy
     networks:
       - volur-network
@@ -68,5 +70,5 @@ networks:
     driver: bridge
 
 volumes:
-  mongodb_data:
+  sqlserver_data:
 

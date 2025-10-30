@@ -4,7 +4,7 @@ namespace Volur.Application.Common;
 /// Metadata about cache state for a response.
 /// </summary>
 public sealed record CacheMetadata(
-    string Source,        // "mongo" | "memory" | "provider"
+    string Source,        // "sql" | "memory" | "provider"
     int TtlSeconds
 );
 

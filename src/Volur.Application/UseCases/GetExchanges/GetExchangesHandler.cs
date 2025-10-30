@@ -54,7 +54,7 @@ public sealed class GetExchangesHandler
                         Count: exchanges.Count,
                         Items: exchanges.Select(e => e.ToDto()).ToList(),
                         FetchedAt: fetchedAt.Value,
-                        Cache: new CacheMetadata("mongo", ttlRemaining)
+                        Cache: new CacheMetadata("sql", ttlRemaining)
                     ));
                 }
 
@@ -86,7 +86,7 @@ public sealed class GetExchangesHandler
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to cache exchanges in MongoDB");
+            _logger.LogError(ex, "Failed to cache exchanges in SQL Server");
             // Continue - we have the data from provider
         }
 

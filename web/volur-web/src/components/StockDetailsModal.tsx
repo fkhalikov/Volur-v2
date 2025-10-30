@@ -3,6 +3,7 @@ import { Dialog, Transition, Tab } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { StockDetailsResponse } from '../types/api'
 import LoadingSpinner from './LoadingSpinner'
+import StockAnalysisTab from './StockAnalysisTab'
 
 interface StockDetailsModalProps {
   isOpen: boolean
@@ -235,7 +236,7 @@ export default function StockDetailsModal({
                       {stockDetails.fundamentals ? (
                         <Tab.Group>
                           <Tab.List className="flex flex-wrap gap-1 rounded-lg bg-slate-800 p-1 mb-4">
-                            {['Overview', 'Description', 'Highlights', 'Valuation', 'Technicals', 'Splits & Dividends', 'Earnings', 'Financials'].map((tabName) => (
+                            {['Overview', 'Description', 'Highlights', 'Valuation', 'Technicals', 'Splits & Dividends', 'Earnings', 'Financials', 'Analysis'].map((tabName) => (
                               <Tab
                                 key={tabName}
                                 className={({ selected }) =>
@@ -594,6 +595,14 @@ export default function StockDetailsModal({
                                 <p className="text-slate-400 italic">Financial statements coming soon...</p>
                                 <p className="text-slate-500 text-sm mt-2">This will include balance sheet, income statement, and cash flow data</p>
                               </div>
+                            </Tab.Panel>
+
+                            {/* Analysis Tab - User Notes and Key-Values */}
+                            <Tab.Panel>
+                              <StockAnalysisTab 
+                                ticker={stockDetails.symbol.ticker} 
+                                exchangeCode={stockDetails.symbol.fullSymbol.split('.')[1] || 'US'} 
+                              />
                             </Tab.Panel>
                           </Tab.Panels>
                         </Tab.Group>

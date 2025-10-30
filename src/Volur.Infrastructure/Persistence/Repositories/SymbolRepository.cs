@@ -1,21 +1,20 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using MongoDB.Driver;
 using Volur.Application.Interfaces;
 using Volur.Domain.Entities;
-using Volur.Infrastructure.Persistence.Mappers;
-using Volur.Infrastructure.Persistence.Models;
+using Volur.Infrastructure.Persistence;
 
 namespace Volur.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// MongoDB implementation of ISymbolRepository.
+/// EF Core implementation of ISymbolRepository.
 /// </summary>
 public sealed class SymbolRepository : ISymbolRepository
 {
-    private readonly MongoDbContext _context;
+    private readonly VolurDbContext _context;
     private readonly ILogger<SymbolRepository> _logger;
 
-    public SymbolRepository(MongoDbContext context, ILogger<SymbolRepository> logger)
+    public SymbolRepository(VolurDbContext context, ILogger<SymbolRepository> logger)
     {
         _context = context;
         _logger = logger;
@@ -33,54 +32,73 @@ public sealed class SymbolRepository : ISymbolRepository
     {
         try
         {
-            var filterBuilder = Builders<SymbolDocument>.Filter;
-            var filter = filterBuilder.Eq(x => x.ParentExchange, exchangeCode);
+            var exchangeCodeUpper = exchangeCode.ToUpperInvariant();
+            
+            var query = _context.Symbols
+                .Where(s => s.ParentExchange == exchangeCodeUpper);
 
             // Apply search filter
             if (!string.IsNullOrWhiteSpace(searchQuery))
             {
-                var searchFilter = filterBuilder.Or(
-                    filterBuilder.Eq(x => x.Ticker, searchQuery.ToUpperInvariant()),
-                    filterBuilder.Regex(x => x.Ticker, new MongoDB.Bson.BsonRegularExpression(searchQuery, "i")),
-                    filterBuilder.Text(searchQuery)
-                );
-                filter = filterBuilder.And(filter, searchFilter);
+                var searchUpper = searchQuery.ToUpperInvariant();
+                query = query.Where(s => 
+                    s.Ticker.Contains(searchUpper) || 
+                    s.Name.Contains(searchQuery));
             }
 
             // Apply type filter
             if (!string.IsNullOrWhiteSpace(typeFilter))
             {
-                filter = filterBuilder.And(filter, filterBuilder.Eq(x => x.Type, typeFilter));
+                query = query.Where(s => s.Type == typeFilter);
             }
 
+            _logger.LogInformation("Querying SQL Server for symbols with ParentExchange={ExchangeCode}, TypeFilter={TypeFilter}, SortBy={SortBy}, SearchQuery={SearchQuery}", 
+                exchangeCodeUpper, typeFilter ?? "none", sortBy ?? "none", searchQuery ?? "none");
+
             // Get total count
-            var totalCount = await _context.Symbols.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
+            var totalCount = await query.CountAsync(cancellationToken);
+            _logger.LogInformation("SQL Server query returned totalCount={TotalCount} for {ExchangeCode}", totalCount, exchangeCode);
+
             if (totalCount == 0)
+            {
+                _logger.LogWarning("No symbols found in SQL Server for {ExchangeCode} with filters", exchangeCode);
                 return null;
+            }
 
-            // Build sort definition
-            var sortDefinition = BuildSortDefinition(sortBy, sortDirection);
+            // Apply sorting
+            query = ApplySorting(query, sortBy, sortDirection);
 
-            // Get paged results
+            // Apply pagination
             var skip = (page - 1) * pageSize;
-            var documents = await _context.Symbols
-                .Find(filter)
-                .Sort(sortDefinition)
+            var entities = await query
                 .Skip(skip)
-                .Limit(pageSize)
+                .Take(pageSize)
                 .ToListAsync(cancellationToken);
 
-            if (documents.Count == 0)
-                return (Array.Empty<Symbol>(), (int)totalCount, DateTime.UtcNow);
+            _logger.LogInformation("SQL Server query returned {Count} documents for page {Page} of {ExchangeCode} (totalCount={TotalCount})", 
+                entities.Count, page, exchangeCode, totalCount);
 
-            var symbols = documents.Select(d => d.ToDomain()).ToList();
-            var fetchedAt = documents.FirstOrDefault()?.FetchedAt;
+            var symbols = entities.Select(e => new Symbol(
+                Ticker: e.Ticker,
+                ExchangeCode: e.ExchangeCode,
+                ParentExchange: e.ParentExchange,
+                Name: e.Name,
+                Type: e.Type,
+                Isin: e.Isin,
+                Currency: e.Currency,
+                IsActive: e.IsActive
+            )).ToList();
 
-            return (symbols, (int)totalCount, fetchedAt);
+            var fetchedAt = entities.FirstOrDefault()?.UpdatedAt;
+
+            _logger.LogInformation("Successfully loaded {Count} symbols from SQL Server for {ExchangeCode}, fetchedAt={FetchedAt}", 
+                symbols.Count, exchangeCode, fetchedAt);
+
+            return (symbols, totalCount, fetchedAt);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get symbols for {ExchangeCode} from MongoDB", exchangeCode);
+            _logger.LogError(ex, "Failed to get symbols for {ExchangeCode} from SQL Server", exchangeCode);
             return null;
         }
     }
@@ -89,56 +107,50 @@ public sealed class SymbolRepository : ISymbolRepository
     {
         try
         {
-            var expiresAt = fetchedAt.Add(ttl);
-            
-            var writes = symbols.Select(s =>
+            foreach (var symbol in symbols)
             {
-                var doc = s.ToDocument(fetchedAt, expiresAt);
-                var filter = Builders<SymbolDocument>.Filter.And(
-                    Builders<SymbolDocument>.Filter.Eq(x => x.Ticker, s.Ticker),
-                    Builders<SymbolDocument>.Filter.Eq(x => x.ExchangeCode, s.ExchangeCode)
-                );
-                
-                var update = Builders<SymbolDocument>.Update
-                    .Set(x => x.Ticker, doc.Ticker)
-                    .Set(x => x.ExchangeCode, doc.ExchangeCode)
-                    .Set(x => x.ParentExchange, doc.ParentExchange)
-                    .Set(x => x.FullSymbol, doc.FullSymbol)
-                    .Set(x => x.Name, doc.Name)
-                    .Set(x => x.Type, doc.Type)
-                    .Set(x => x.Isin, doc.Isin)
-                    .Set(x => x.Currency, doc.Currency)
-                    .Set(x => x.IsActive, doc.IsActive)
-                    .Set(x => x.FetchedAt, doc.FetchedAt)
-                    .Set(x => x.ExpiresAt, doc.ExpiresAt);
-                
-                return new UpdateOneModel<SymbolDocument>(filter, update)
-                {
-                    IsUpsert = true
-                };
-            }).ToList();
+                var fullSymbol = symbol.FullSymbol;
+                var existing = await _context.Symbols
+                    .FirstOrDefaultAsync(s => s.FullSymbol == fullSymbol, cancellationToken);
 
-            if (writes.Count > 0)
-            {
-                // Process in batches to avoid MongoDB timeouts on large datasets
-                const int batchSize = 1000;
-                var totalProcessed = 0;
-                
-                for (int i = 0; i < writes.Count; i += batchSize)
+                if (existing != null)
                 {
-                    var batch = writes.Skip(i).Take(batchSize).ToList();
-                    await _context.Symbols.BulkWriteAsync(batch, new BulkWriteOptions { IsOrdered = false }, cancellationToken);
-                    totalProcessed += batch.Count;
-                    _logger.LogDebug("Upserted batch {Batch}/{Total} ({Count} symbols) for {ExchangeCode}", 
-                        (i / batchSize) + 1, (writes.Count + batchSize - 1) / batchSize, batch.Count, exchangeCode);
+                    // Update existing
+                    existing.Ticker = symbol.Ticker;
+                    existing.ExchangeCode = symbol.ExchangeCode;
+                    existing.ParentExchange = symbol.ParentExchange;
+                    existing.Name = symbol.Name;
+                    existing.Type = symbol.Type;
+                    existing.Isin = symbol.Isin;
+                    existing.Currency = symbol.Currency;
+                    existing.IsActive = symbol.IsActive;
+                    // UpdatedAt will be set by interceptor
                 }
-                
-                _logger.LogInformation("Successfully upserted {Count} symbols for {ExchangeCode}", totalProcessed, exchangeCode);
+                else
+                {
+                    // Insert new
+                    var entity = new SymbolEntity
+                    {
+                        Ticker = symbol.Ticker,
+                        ExchangeCode = symbol.ExchangeCode,
+                        ParentExchange = symbol.ParentExchange,
+                        FullSymbol = symbol.FullSymbol,
+                        Name = symbol.Name,
+                        Type = symbol.Type,
+                        Isin = symbol.Isin,
+                        Currency = symbol.Currency,
+                        IsActive = symbol.IsActive
+                    };
+                    _context.Symbols.Add(entity);
+                }
             }
+
+            await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Successfully upserted {Count} symbols for {ExchangeCode}", symbols.Count, exchangeCode);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to upsert symbols for {ExchangeCode} in MongoDB", exchangeCode);
+            _logger.LogError(ex, "Failed to upsert symbols for {ExchangeCode} in SQL Server", exchangeCode);
             throw;
         }
     }
@@ -147,15 +159,22 @@ public sealed class SymbolRepository : ISymbolRepository
     {
         try
         {
-            var result = await _context.Symbols.DeleteManyAsync(
-                x => x.ParentExchange == exchangeCode,
-                cancellationToken);
+            var entities = await _context.Symbols
+                .Where(s => s.ParentExchange == exchangeCode)
+                .ToListAsync(cancellationToken);
 
-            _logger.LogDebug("Deleted {Count} symbols for {ExchangeCode}", result.DeletedCount, exchangeCode);
+            foreach (var entity in entities)
+            {
+                entity.SoftDelete();
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogDebug("Soft deleted {Count} symbols for {ExchangeCode}", entities.Count, exchangeCode);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to delete symbols for {ExchangeCode} from MongoDB", exchangeCode);
+            _logger.LogError(ex, "Failed to delete symbols for {ExchangeCode} from SQL Server", exchangeCode);
             throw;
         }
     }
@@ -164,18 +183,28 @@ public sealed class SymbolRepository : ISymbolRepository
     {
         try
         {
-            var filter = Builders<SymbolDocument>.Filter.Eq(x => x.Ticker, ticker.ToUpperInvariant());
-            var document = await _context.Symbols.Find(filter).FirstOrDefaultAsync(cancellationToken);
+            var entity = await _context.Symbols
+                .FirstOrDefaultAsync(s => s.Ticker == ticker.ToUpperInvariant(), cancellationToken);
 
-            if (document == null)
+            if (entity == null)
             {
                 _logger.LogDebug("Symbol not found for ticker: {Ticker}", ticker);
                 return null;
             }
 
-            var symbol = document.ToDomain();
+            var symbol = new Symbol(
+                Ticker: entity.Ticker,
+                ExchangeCode: entity.ExchangeCode,
+                ParentExchange: entity.ParentExchange,
+                Name: entity.Name,
+                Type: entity.Type,
+                Isin: entity.Isin,
+                Currency: entity.Currency,
+                IsActive: entity.IsActive
+            );
+
             _logger.LogDebug("Found symbol for ticker: {Ticker} on exchange {Exchange}", ticker, symbol.ExchangeCode);
-            
+
             return symbol;
         }
         catch (Exception ex)
@@ -191,35 +220,37 @@ public sealed class SymbolRepository : ISymbolRepository
     {
         try
         {
-            var filter = Builders<SymbolDocument>.Filter.Eq(x => x.ParentExchange, exchangeCode);
-            
-            // Get total count
-            var totalCount = await _context.Symbols.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
-            
+            var query = _context.Symbols
+                .Where(s => s.ParentExchange == exchangeCode);
+
+            var totalCount = await query.CountAsync(cancellationToken);
+
             if (totalCount == 0)
             {
                 _logger.LogDebug("No symbols found for exchange: {ExchangeCode}", exchangeCode);
                 return null;
             }
 
-            // Get all documents without pagination
-            var documents = await _context.Symbols
-                .Find(filter)
-                .SortBy(x => x.Ticker)
+            var entities = await query
+                .OrderBy(s => s.Ticker)
                 .ToListAsync(cancellationToken);
 
-            if (!documents.Any())
-            {
-                _logger.LogDebug("No symbols found for exchange: {ExchangeCode}", exchangeCode);
-                return null;
-            }
+            var symbols = entities.Select(e => new Symbol(
+                Ticker: e.Ticker,
+                ExchangeCode: e.ExchangeCode,
+                ParentExchange: e.ParentExchange,
+                Name: e.Name,
+                Type: e.Type,
+                Isin: e.Isin,
+                Currency: e.Currency,
+                IsActive: e.IsActive
+            )).ToList();
 
-            var symbols = documents.Select(d => d.ToDomain()).ToList();
-            var fetchedAt = documents.FirstOrDefault()?.FetchedAt;
+            var fetchedAt = entities.FirstOrDefault()?.UpdatedAt;
 
             _logger.LogDebug("Retrieved {Count} symbols for exchange: {ExchangeCode}", symbols.Count, exchangeCode);
-            
-            return (symbols, (int)totalCount, fetchedAt);
+
+            return (symbols, totalCount, fetchedAt);
         }
         catch (Exception ex)
         {
@@ -228,31 +259,102 @@ public sealed class SymbolRepository : ISymbolRepository
         }
     }
 
-    private SortDefinition<SymbolDocument> BuildSortDefinition(string? sortBy, string? sortDirection)
+    public async Task UpdateDenormalizedFieldsAsync(
+        string ticker,
+        double? trailingPE = null,
+        double? marketCap = null,
+        double? currentPrice = null,
+        double? changePercent = null,
+        double? dividendYield = null,
+        string? sector = null,
+        string? industry = null,
+        CancellationToken cancellationToken = default)
     {
-        var sortBuilder = Builders<SymbolDocument>.Sort;
+        try
+        {
+            var entity = await _context.Symbols
+                .FirstOrDefaultAsync(s => s.Ticker == ticker.ToUpperInvariant(), cancellationToken);
+
+            if (entity == null)
+            {
+                _logger.LogWarning("Symbol not found for ticker: {Ticker}", ticker);
+                return;
+            }
+
+            // Update only if value is provided
+            if (trailingPE.HasValue)
+                entity.TrailingPE = trailingPE.Value;
+            if (marketCap.HasValue)
+                entity.MarketCap = marketCap.Value;
+            if (currentPrice.HasValue)
+                entity.CurrentPrice = currentPrice.Value;
+            if (changePercent.HasValue)
+                entity.ChangePercent = changePercent.Value;
+            if (dividendYield.HasValue)
+                entity.DividendYield = dividendYield.Value;
+            if (sector != null)
+                entity.Sector = sector;
+            if (industry != null)
+                entity.Industry = industry;
+
+            await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogDebug("Updated denormalized fields for {Ticker}", ticker);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update denormalized fields for {Ticker}", ticker);
+            // Don't throw - this is a best-effort optimization
+        }
+    }
+
+    private IQueryable<SymbolEntity> ApplySorting(IQueryable<SymbolEntity> query, string? sortBy, string? sortDirection)
+    {
         var isDescending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
 
-        // Default sorting by ticker if no sort field specified
         if (string.IsNullOrWhiteSpace(sortBy))
         {
-            return sortBuilder.Ascending(x => x.Ticker);
+            return query.OrderBy(s => s.Ticker);
         }
 
-        // Map frontend sort fields to MongoDB document fields
-        // Note: Some fields like price, marketcap, pe, etc. are enriched data and will be sorted client-side
         return sortBy.ToLowerInvariant() switch
         {
-            "ticker" or "symbol" => isDescending ? sortBuilder.Descending(x => x.Ticker) : sortBuilder.Ascending(x => x.Ticker),
-            "name" => isDescending ? sortBuilder.Descending(x => x.Name) : sortBuilder.Ascending(x => x.Name),
-            "type" => isDescending ? sortBuilder.Descending(x => x.Type) : sortBuilder.Ascending(x => x.Type),
-            "currency" => isDescending ? sortBuilder.Descending(x => x.Currency) : sortBuilder.Ascending(x => x.Currency),
-            "isactive" => isDescending ? sortBuilder.Descending(x => x.IsActive) : sortBuilder.Ascending(x => x.IsActive),
-            // Sector and Industry are enriched fields, not stored in database - handle client-side
-            // For enriched fields (price, marketcap, pe, dividend, change), we'll sort by ticker and handle client-side
-            "price" or "marketcap" or "pe" or "dividend" or "change" => sortBuilder.Ascending(x => x.Ticker),
-            _ => sortBuilder.Ascending(x => x.Ticker) // Default fallback
+            "ticker" or "symbol" => isDescending 
+                ? query.OrderByDescending(s => s.Ticker)
+                : query.OrderBy(s => s.Ticker),
+            "name" => isDescending 
+                ? query.OrderByDescending(s => s.Name)
+                : query.OrderBy(s => s.Name),
+            "type" => isDescending 
+                ? query.OrderByDescending(s => s.Type)
+                : query.OrderBy(s => s.Type),
+            "currency" => isDescending 
+                ? query.OrderByDescending(s => s.Currency)
+                : query.OrderBy(s => s.Currency),
+            "isactive" => isDescending 
+                ? query.OrderByDescending(s => s.IsActive)
+                : query.OrderBy(s => s.IsActive),
+            "price" => isDescending 
+                ? query.OrderByDescending(s => s.CurrentPrice).ThenBy(s => s.Ticker)
+                : query.OrderBy(s => s.CurrentPrice ?? double.MaxValue).ThenBy(s => s.Ticker),
+            "marketcap" => isDescending 
+                ? query.OrderByDescending(s => s.MarketCap).ThenBy(s => s.Ticker)
+                : query.OrderBy(s => s.MarketCap ?? double.MaxValue).ThenBy(s => s.Ticker),
+            "pe" => isDescending 
+                ? query.OrderByDescending(s => s.TrailingPE).ThenBy(s => s.Ticker)
+                : query.OrderBy(s => s.TrailingPE ?? double.MaxValue).ThenBy(s => s.Ticker),
+            "dividend" => isDescending 
+                ? query.OrderByDescending(s => s.DividendYield).ThenBy(s => s.Ticker)
+                : query.OrderBy(s => s.DividendYield ?? double.MaxValue).ThenBy(s => s.Ticker),
+            "change" => isDescending 
+                ? query.OrderByDescending(s => s.ChangePercent).ThenBy(s => s.Ticker)
+                : query.OrderBy(s => s.ChangePercent ?? double.MaxValue).ThenBy(s => s.Ticker),
+            "sector" => isDescending 
+                ? query.OrderByDescending(s => s.Sector).ThenBy(s => s.Ticker)
+                : query.OrderBy(s => s.Sector ?? "").ThenBy(s => s.Ticker),
+            "industry" => isDescending 
+                ? query.OrderByDescending(s => s.Industry).ThenBy(s => s.Ticker)
+                : query.OrderBy(s => s.Industry ?? "").ThenBy(s => s.Ticker),
+            _ => query.OrderBy(s => s.Ticker)
         };
     }
 }
-

@@ -331,10 +331,17 @@ Volur-v2/
 
 Structured logging with Serilog:
 - Console output (JSON in production)
+- **File logging**: Logs written to `src/Volur.Api/bin/Debug/net8.0/logs/volur-YYYYMMDD.log`
 - Correlation with `traceId` per request
 - Request/response logging
 - Provider latency tracking
 - Cache hit/miss metrics
+
+**For debugging backend issues, see [DEVELOPMENT.md](DEVELOPMENT.md#reading-log-files-for-backend-issues)** for:
+- How to read log files
+- Common MongoDB error patterns
+- Testing endpoints and checking logs
+- Debugging workflow
 
 ## 🔄 CI/CD
 

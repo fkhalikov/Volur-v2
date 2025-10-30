@@ -1,21 +1,20 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using MongoDB.Driver;
 using Volur.Application.Interfaces;
 using Volur.Domain.Entities;
-using Volur.Infrastructure.Persistence.Mappers;
-using Volur.Infrastructure.Persistence.Models;
+using Volur.Infrastructure.Persistence;
 
 namespace Volur.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// MongoDB implementation of IExchangeRepository.
+/// EF Core implementation of IExchangeRepository.
 /// </summary>
 public sealed class ExchangeRepository : IExchangeRepository
 {
-    private readonly MongoDbContext _context;
+    private readonly VolurDbContext _context;
     private readonly ILogger<ExchangeRepository> _logger;
 
-    public ExchangeRepository(MongoDbContext context, ILogger<ExchangeRepository> logger)
+    public ExchangeRepository(VolurDbContext context, ILogger<ExchangeRepository> logger)
     {
         _context = context;
         _logger = logger;
@@ -25,21 +24,28 @@ public sealed class ExchangeRepository : IExchangeRepository
     {
         try
         {
-            var documents = await _context.Exchanges
-                .Find(_ => true)
+            var entities = await _context.Exchanges
+                .OrderBy(e => e.Code)
                 .ToListAsync(cancellationToken);
 
-            if (documents.Count == 0)
+            if (entities.Count == 0)
                 return null;
 
-            var exchanges = documents.Select(d => d.ToDomain()).ToList();
-            var fetchedAt = documents.FirstOrDefault()?.FetchedAt;
+            var exchanges = entities.Select(e => new Exchange(
+                Code: e.Code,
+                Name: e.Name,
+                OperatingMic: e.OperatingMic,
+                Country: e.Country,
+                Currency: e.Currency
+            )).ToList();
+
+            var fetchedAt = entities.FirstOrDefault()?.UpdatedAt;
 
             return (exchanges, fetchedAt);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get exchanges from MongoDB");
+            _logger.LogError(ex, "Failed to get exchanges from SQL Server");
             return null;
         }
     }
@@ -48,15 +54,23 @@ public sealed class ExchangeRepository : IExchangeRepository
     {
         try
         {
-            var document = await _context.Exchanges
-                .Find(x => x.Code == code)
-                .FirstOrDefaultAsync(cancellationToken);
+            var entity = await _context.Exchanges
+                .FirstOrDefaultAsync(e => e.Code == code, cancellationToken);
 
-            return document?.ToDomain();
+            if (entity == null)
+                return null;
+
+            return new Exchange(
+                Code: entity.Code,
+                Name: entity.Name,
+                OperatingMic: entity.OperatingMic,
+                Country: entity.Country,
+                Currency: entity.Currency
+            );
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get exchange {Code} from MongoDB", code);
+            _logger.LogError(ex, "Failed to get exchange {Code} from SQL Server", code);
             return null;
         }
     }
@@ -65,29 +79,41 @@ public sealed class ExchangeRepository : IExchangeRepository
     {
         try
         {
-            var expiresAt = fetchedAt.Add(ttl);
-            var writes = exchanges.Select(e =>
+            foreach (var exchange in exchanges)
             {
-                var doc = e.ToDocument(fetchedAt, expiresAt);
-                return new ReplaceOneModel<ExchangeDocument>(
-                    Builders<ExchangeDocument>.Filter.Eq(x => x.Code, doc.Code),
-                    doc)
-                {
-                    IsUpsert = true
-                };
-            }).ToList();
+                var existing = await _context.Exchanges.FindAsync(new object[] { exchange.Code }, cancellationToken);
 
-            if (writes.Count > 0)
-            {
-                await _context.Exchanges.BulkWriteAsync(writes, new BulkWriteOptions { IsOrdered = false }, cancellationToken);
-                _logger.LogDebug("Upserted {Count} exchanges", writes.Count);
+                if (existing != null)
+                {
+                    // Update existing
+                    existing.Name = exchange.Name;
+                    existing.OperatingMic = exchange.OperatingMic;
+                    existing.Country = exchange.Country;
+                    existing.Currency = exchange.Currency;
+                    // UpdatedAt will be set by interceptor
+                }
+                else
+                {
+                    // Insert new
+                    var entity = new ExchangeEntity
+                    {
+                        Code = exchange.Code,
+                        Name = exchange.Name,
+                        OperatingMic = exchange.OperatingMic,
+                        Country = exchange.Country,
+                        Currency = exchange.Currency
+                    };
+                    _context.Exchanges.Add(entity);
+                }
             }
+
+            await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogDebug("Upserted {Count} exchanges", exchanges.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to upsert exchanges in MongoDB");
+            _logger.LogError(ex, "Failed to upsert exchanges in SQL Server");
             throw;
         }
     }
 }
-

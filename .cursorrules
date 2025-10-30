@@ -1,0 +1,27 @@
+# Cursor Rules for Volur Backend Debugging
+
+## Log Files for Backend Debugging
+
+When debugging backend issues, especially MongoDB errors, always check the log files:
+
+**Location:**
+- Development: `src/Volur.Api/bin/Debug/net8.0/logs/volur-YYYYMMDD.log`
+- Logs are rolled daily (one file per day)
+
+**How to Read:**
+- Windows: `Get-Content "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Tail 100`
+- Linux/Mac: `tail -100 src/Volur.Api/bin/Debug/net8.0/logs/volur-*.log`
+- Search for errors: `Select-String -Path "logs\volur-*.log" -Pattern "ERR"` (PowerShell) or `grep "ERR" logs/*.log` (bash)
+
+**Common Issues:**
+1. **MongoDB LINQ Expression Not Supported**: Cannot use `??` (null-coalescing) in MongoDB sort/filter expressions. MongoDB handles nulls naturally.
+2. **No Documents Found**: Check if data exists in MongoDB for that exchange code. Look for `Raw count` in logs.
+3. **Query Errors**: Full stack traces are in log files with `[ERR]` level.
+
+**Testing and Debugging Workflow:**
+1. Make API call: `Invoke-RestMethod -Uri "http://localhost:5000/api/exchanges/LSE/symbols?page=1&pageSize=50"`
+2. Immediately check logs: `Get-Content "src\Volur.Api\bin\Debug\net8.0\logs\volur-*.log" -Tail 50`
+3. Look for `[ERR]` or `[WRN]` entries for the issue
+
+**See DEVELOPMENT.md for complete debugging guide.**
+

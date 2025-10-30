@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Volur.Application;
 using Volur.Infrastructure;
@@ -7,10 +8,16 @@ using Volur.Api.Middleware;
 var builder = WebApplication.CreateBuilder(args);
 
 // Serilog configuration
+var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "volur-.log");
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
     .WriteTo.Console()
+    .WriteTo.File(
+        path: logPath,
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -48,10 +55,12 @@ builder.Services.AddCors(options =>
 });
 
 // Health checks
+var sqlServerConnectionString = builder.Configuration.GetSection("SqlServer:ConnectionString").Value 
+    ?? "Server=.\\SQLEXPRESS;Database=Volur;Trusted_Connection=True;TrustServerCertificate=True;";
 builder.Services.AddHealthChecks()
-    .AddMongoDb(
-        mongodbConnectionString: builder.Configuration["Mongo:ConnectionString"] ?? "mongodb://localhost:27017",
-        name: "mongodb",
+    .AddSqlServer(
+        connectionString: sqlServerConnectionString,
+        name: "sqlserver",
         timeout: TimeSpan.FromSeconds(3));
 
 // Application layers
@@ -60,18 +69,18 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
-// Ensure MongoDB indexes on startup
+// Ensure SQL Server database exists on startup
 using (var scope = app.Services.CreateScope())
 {
     try
     {
-        var mongoContext = scope.ServiceProvider.GetRequiredService<MongoDbContext>();
-        await mongoContext.EnsureIndexesAsync();
-        Log.Information("MongoDB indexes initialized successfully");
+        var sqlContext = scope.ServiceProvider.GetRequiredService<VolurDbContext>();
+        await sqlContext.Database.MigrateAsync();
+        Log.Information("SQL Server database initialized successfully");
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "Failed to initialize MongoDB indexes");
+        Log.Error(ex, "Failed to initialize SQL Server database");
         throw;
     }
 }
