@@ -200,12 +200,23 @@ public sealed class EodhdClient : IEodhdClient, IDisposable
         try
         {
             // Wait for rate limit permit before making request
+            // AcquireAsync will wait until tokens are available (up to 1 minute for replenishment)
+            var waitStartTime = DateTime.UtcNow;
             using var lease = await _rateLimiter.AcquireAsync(permitCount: 1, cancellationToken);
             
+            // Only check IsAcquired for cancellation - AcquireAsync waits indefinitely for tokens
             if (!lease.IsAcquired)
             {
-                _logger.LogWarning("EODHD rate limit permit not acquired for {Endpoint} (timeout or cancelled)", endpoint);
-                return Result.Failure<T>(Error.ProviderRateLimit("Rate limit permit not available. Please try again later."));
+                // This only happens if cancellation was requested
+                _logger.LogInformation("EODHD rate limit permit acquisition cancelled for {Endpoint}", endpoint);
+                throw new OperationCanceledException("Request was cancelled while waiting for rate limit permit", cancellationToken);
+            }
+
+            var waitTime = DateTime.UtcNow - waitStartTime;
+            if (waitTime.TotalMilliseconds > 100)
+            {
+                _logger.LogInformation("EODHD rate limit wait completed: waited {WaitMs}ms for permit for {Endpoint}", 
+                    waitTime.TotalMilliseconds, endpoint);
             }
 
             _logger.LogInformation("Requesting EODHD: {Endpoint}", endpoint);
@@ -261,9 +272,24 @@ public sealed class EodhdClient : IEodhdClient, IDisposable
         }
         catch (TaskCanceledException)
         {
+            // HTTP client timeout
             var elapsed = DateTime.UtcNow - startTime;
             _logger.LogWarning("EODHD request timeout: {Endpoint} ({ElapsedMs}ms)", endpoint, elapsed.TotalMilliseconds);
             return Result.Failure<T>(Error.ProviderUnavailable("Request timeout."));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Request was cancelled while waiting for rate limit or during request
+            var elapsed = DateTime.UtcNow - startTime;
+            _logger.LogInformation("EODHD request cancelled: {Endpoint} ({ElapsedMs}ms)", endpoint, elapsed.TotalMilliseconds);
+            throw; // Re-throw cancellation to propagate properly
+        }
+        catch (OperationCanceledException)
+        {
+            // Other cancellation scenarios (timeout, etc.)
+            var elapsed = DateTime.UtcNow - startTime;
+            _logger.LogWarning("EODHD request cancelled/timeout: {Endpoint} ({ElapsedMs}ms)", endpoint, elapsed.TotalMilliseconds);
+            return Result.Failure<T>(Error.ProviderUnavailable("Request cancelled or timed out."));
         }
         catch (HttpRequestException ex)
         {
