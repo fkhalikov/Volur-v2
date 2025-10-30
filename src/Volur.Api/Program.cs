@@ -55,10 +55,12 @@ builder.Services.AddCors(options =>
 });
 
 // Health checks
+var sqlServerConnectionString = builder.Configuration.GetSection("SqlServer:ConnectionString").Value 
+    ?? "Server=.\\SQLEXPRESS;Database=Volur;Trusted_Connection=True;TrustServerCertificate=True;";
 builder.Services.AddHealthChecks()
-    .AddMongoDb(
-        mongodbConnectionString: builder.Configuration["Mongo:ConnectionString"] ?? "mongodb://localhost:27017",
-        name: "mongodb",
+    .AddSqlServer(
+        connectionString: sqlServerConnectionString,
+        name: "sqlserver",
         timeout: TimeSpan.FromSeconds(3));
 
 // Application layers
@@ -66,22 +68,6 @@ builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
-
-// Ensure MongoDB indexes on startup
-using (var scope = app.Services.CreateScope())
-{
-    try
-    {
-        var mongoContext = scope.ServiceProvider.GetRequiredService<MongoDbContext>();
-        await mongoContext.EnsureIndexesAsync();
-        Log.Information("MongoDB indexes initialized successfully");
-    }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "Failed to initialize MongoDB indexes");
-        throw;
-    }
-}
 
 // Ensure SQL Server database exists on startup
 using (var scope = app.Services.CreateScope())

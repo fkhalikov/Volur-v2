@@ -7,9 +7,8 @@
   "Eodhd": {
     "ApiToken": "YOUR_EODHD_API_TOKEN_HERE"
   },
-  "Mongo": {
-    "ConnectionString": "mongodb://localhost:27017",
-    "Database": "volur_dev"
+  "SqlServer": {
+    "ConnectionString": "Server=.\\SQLEXPRESS;Database=Volur;Trusted_Connection=True;TrustServerCertificate=True;"
   }
 }
 

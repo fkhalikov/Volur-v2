@@ -23,8 +23,9 @@ public sealed class StockAnalysisRepository : IStockAnalysisRepository
     // Stock Notes
     public async Task<IEnumerable<StockNote>> GetNotesAsync(string ticker, string exchangeCode, CancellationToken cancellationToken = default)
     {
+        // Soft delete is handled by query filter in DbContext
         return await _context.StockNotes
-            .Where(n => n.Ticker == ticker && n.ExchangeCode == exchangeCode && !n.IsDeleted)
+            .Where(n => n.Ticker == ticker && n.ExchangeCode == exchangeCode)
             .OrderByDescending(n => n.CreatedAt)
             .ToListAsync(cancellationToken);
     }
@@ -36,9 +37,7 @@ public sealed class StockAnalysisRepository : IStockAnalysisRepository
 
     public async Task<StockNote> CreateNoteAsync(StockNote note, CancellationToken cancellationToken = default)
     {
-        note.CreatedAt = DateTime.UtcNow;
-        note.UpdatedAt = DateTime.UtcNow;
-        
+        // Timestamps managed by interceptor
         _context.StockNotes.Add(note);
         await _context.SaveChangesAsync(cancellationToken);
         
@@ -47,8 +46,7 @@ public sealed class StockAnalysisRepository : IStockAnalysisRepository
 
     public async Task<StockNote> UpdateNoteAsync(StockNote note, CancellationToken cancellationToken = default)
     {
-        note.UpdatedAt = DateTime.UtcNow;
-        
+        // Timestamps managed by interceptor
         _context.StockNotes.Update(note);
         await _context.SaveChangesAsync(cancellationToken);
         
@@ -60,8 +58,7 @@ public sealed class StockAnalysisRepository : IStockAnalysisRepository
         var note = await _context.StockNotes.FindAsync(new object[] { id }, cancellationToken);
         if (note != null)
         {
-            note.IsDeleted = true;
-            note.UpdatedAt = DateTime.UtcNow;
+            note.SoftDelete(); // Soft delete managed by interceptor
             _context.StockNotes.Update(note);
             await _context.SaveChangesAsync(cancellationToken);
         }
@@ -70,8 +67,9 @@ public sealed class StockAnalysisRepository : IStockAnalysisRepository
     // Stock Key-Values
     public async Task<IEnumerable<StockKeyValue>> GetKeyValuesAsync(string ticker, string exchangeCode, CancellationToken cancellationToken = default)
     {
+        // Soft delete is handled by query filter in DbContext
         return await _context.StockKeyValues
-            .Where(kv => kv.Ticker == ticker && kv.ExchangeCode == exchangeCode && !kv.IsDeleted)
+            .Where(kv => kv.Ticker == ticker && kv.ExchangeCode == exchangeCode)
             .OrderByDescending(kv => kv.CreatedAt)
             .ToListAsync(cancellationToken);
     }
@@ -83,9 +81,7 @@ public sealed class StockAnalysisRepository : IStockAnalysisRepository
 
     public async Task<StockKeyValue> CreateKeyValueAsync(StockKeyValue keyValue, CancellationToken cancellationToken = default)
     {
-        keyValue.CreatedAt = DateTime.UtcNow;
-        keyValue.UpdatedAt = DateTime.UtcNow;
-        
+        // Timestamps managed by interceptor
         _context.StockKeyValues.Add(keyValue);
         await _context.SaveChangesAsync(cancellationToken);
         
@@ -94,8 +90,7 @@ public sealed class StockAnalysisRepository : IStockAnalysisRepository
 
     public async Task<StockKeyValue> UpdateKeyValueAsync(StockKeyValue keyValue, CancellationToken cancellationToken = default)
     {
-        keyValue.UpdatedAt = DateTime.UtcNow;
-        
+        // Timestamps managed by interceptor
         _context.StockKeyValues.Update(keyValue);
         await _context.SaveChangesAsync(cancellationToken);
         
@@ -107,8 +102,7 @@ public sealed class StockAnalysisRepository : IStockAnalysisRepository
         var keyValue = await _context.StockKeyValues.FindAsync(new object[] { id }, cancellationToken);
         if (keyValue != null)
         {
-            keyValue.IsDeleted = true;
-            keyValue.UpdatedAt = DateTime.UtcNow;
+            keyValue.SoftDelete(); // Soft delete managed by interceptor
             _context.StockKeyValues.Update(keyValue);
             await _context.SaveChangesAsync(cancellationToken);
         }

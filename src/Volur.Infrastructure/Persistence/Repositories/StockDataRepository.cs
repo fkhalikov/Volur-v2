@@ -1,23 +1,23 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using MongoDB.Driver;
 using Volur.Application.DTOs;
 using Volur.Application.Interfaces;
-using Volur.Infrastructure.Persistence.Mappers;
-using Volur.Infrastructure.Persistence.Models;
+using Volur.Domain.Entities;
+using Volur.Infrastructure.Persistence;
 
 namespace Volur.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// MongoDB implementation of stock data repository.
+/// EF Core implementation of stock data repository.
 /// </summary>
 public sealed class StockDataRepository : IStockDataRepository
 {
-    private readonly MongoDbContext _context;
+    private readonly VolurDbContext _context;
     private readonly ILogger<StockDataRepository> _logger;
     private readonly ISymbolRepository _symbolRepository;
 
     public StockDataRepository(
-        MongoDbContext context, 
+        VolurDbContext context, 
         ILogger<StockDataRepository> logger,
         ISymbolRepository symbolRepository)
     {
@@ -30,19 +30,32 @@ public sealed class StockDataRepository : IStockDataRepository
     {
         try
         {
-            var filter = Builders<StockQuoteDocument>.Filter.Eq(x => x.Ticker, ticker.ToUpperInvariant());
-            var document = await _context.StockQuotes.Find(filter).FirstOrDefaultAsync(cancellationToken);
+            var entity = await _context.StockQuotes
+                .FirstOrDefaultAsync(q => q.Ticker == ticker.ToUpperInvariant(), cancellationToken);
 
-            if (document == null)
+            if (entity == null)
             {
                 _logger.LogDebug("No cached quote found for ticker: {Ticker}", ticker);
                 return null;
             }
 
-            var dto = document.ToDto();
-            _logger.LogDebug("Retrieved cached quote for {Ticker}, fetched at {FetchedAt}", ticker, document.FetchedAt);
+            var dto = new StockQuoteDto(
+                Ticker: entity.Ticker,
+                CurrentPrice: entity.CurrentPrice,
+                PreviousClose: entity.PreviousClose,
+                Change: entity.Change,
+                ChangePercent: entity.ChangePercent,
+                Open: entity.Open,
+                High: entity.High,
+                Low: entity.Low,
+                Volume: entity.Volume,
+                AverageVolume: entity.AverageVolume,
+                LastUpdated: entity.LastUpdated
+            );
+
+            _logger.LogDebug("Retrieved cached quote for {Ticker}, fetched at {FetchedAt}", ticker, entity.UpdatedAt);
             
-            return (dto, document.FetchedAt);
+            return (dto, entity.UpdatedAt);
         }
         catch (Exception ex)
         {
@@ -55,31 +68,47 @@ public sealed class StockDataRepository : IStockDataRepository
     {
         try
         {
-            var fetchedAt = DateTime.UtcNow;
-            var document = quote.ToDocument(fetchedAt);
-            
-            var filter = Builders<StockQuoteDocument>.Filter.Eq(x => x.Ticker, quote.Ticker.ToUpperInvariant());
-            var update = Builders<StockQuoteDocument>.Update
-                .Set(x => x.Ticker, document.Ticker)
-                .Set(x => x.CurrentPrice, document.CurrentPrice)
-                .Set(x => x.PreviousClose, document.PreviousClose)
-                .Set(x => x.Change, document.Change)
-                .Set(x => x.ChangePercent, document.ChangePercent)
-                .Set(x => x.Open, document.Open)
-                .Set(x => x.High, document.High)
-                .Set(x => x.Low, document.Low)
-                .Set(x => x.Volume, document.Volume)
-                .Set(x => x.AverageVolume, document.AverageVolume)
-                .Set(x => x.LastUpdated, document.LastUpdated)
-                .Set(x => x.FetchedAt, document.FetchedAt);
+            var ticker = quote.Ticker.ToUpperInvariant();
+            var entity = await _context.StockQuotes
+                .FirstOrDefaultAsync(q => q.Ticker == ticker, cancellationToken);
 
-            await _context.StockQuotes.UpdateOneAsync(
-                filter, 
-                update, 
-                new UpdateOptions { IsUpsert = true }, 
-                cancellationToken);
+            if (entity != null)
+            {
+                // Update existing
+                entity.CurrentPrice = quote.CurrentPrice;
+                entity.PreviousClose = quote.PreviousClose;
+                entity.Change = quote.Change;
+                entity.ChangePercent = quote.ChangePercent;
+                entity.Open = quote.Open;
+                entity.High = quote.High;
+                entity.Low = quote.Low;
+                entity.Volume = quote.Volume;
+                entity.AverageVolume = quote.AverageVolume;
+                entity.LastUpdated = quote.LastUpdated;
+            }
+            else
+            {
+                // Insert new
+                entity = new StockQuoteEntity
+                {
+                    Ticker = ticker,
+                    CurrentPrice = quote.CurrentPrice,
+                    PreviousClose = quote.PreviousClose,
+                    Change = quote.Change,
+                    ChangePercent = quote.ChangePercent,
+                    Open = quote.Open,
+                    High = quote.High,
+                    Low = quote.Low,
+                    Volume = quote.Volume,
+                    AverageVolume = quote.AverageVolume,
+                    LastUpdated = quote.LastUpdated
+                };
+                _context.StockQuotes.Add(entity);
+            }
 
-            // Update denormalized fields in SymbolDocument for efficient sorting (best-effort, don't fail if this fails)
+            await _context.SaveChangesAsync(cancellationToken);
+
+            // Update denormalized fields in SymbolEntity for efficient sorting (best-effort, don't fail if this fails)
             try
             {
                 await _symbolRepository.UpdateDenormalizedFieldsAsync(
@@ -106,19 +135,69 @@ public sealed class StockDataRepository : IStockDataRepository
     {
         try
         {
-            var filter = Builders<StockFundamentalsDocument>.Filter.Eq(x => x.Ticker, ticker.ToUpperInvariant());
-            var document = await _context.StockFundamentals.Find(filter).FirstOrDefaultAsync(cancellationToken);
+            var entity = await _context.StockFundamentals
+                .FirstOrDefaultAsync(f => f.Ticker == ticker.ToUpperInvariant(), cancellationToken);
 
-            if (document == null)
+            if (entity == null)
             {
                 _logger.LogDebug("No cached fundamentals found for ticker: {Ticker}", ticker);
                 return null;
             }
 
-            var dto = document.ToDto();
-            _logger.LogDebug("Retrieved cached fundamentals for {Ticker}, fetched at {FetchedAt}", ticker, document.FetchedAt);
+            var dto = new StockFundamentalsDto(
+                Ticker: entity.Ticker,
+                CompanyName: entity.CompanyName,
+                Sector: entity.Sector,
+                Industry: entity.Industry,
+                Description: entity.Description,
+                Website: entity.Website,
+                LogoUrl: entity.LogoUrl,
+                CurrencyCode: entity.CurrencyCode,
+                CurrencySymbol: entity.CurrencySymbol,
+                CurrencyName: entity.CurrencyName,
+                Highlights: null, // Not stored separately - individual fields are used
+                Valuation: null, // Not stored separately - individual fields are used
+                Technicals: null, // Not stored separately - individual fields are used
+                SplitsDividends: null, // Not stored separately - individual fields are used
+                Earnings: null, // Not stored separately - individual fields are used
+                Financials: null, // Not stored separately - individual fields are used
+                MarketCap: entity.MarketCap,
+                EnterpriseValue: entity.EnterpriseValue,
+                TrailingPE: entity.TrailingPE,
+                ForwardPE: entity.ForwardPE,
+                PEG: entity.PEG,
+                PriceToSales: entity.PriceToSales,
+                PriceToBook: entity.PriceToBook,
+                EnterpriseToRevenue: entity.EnterpriseToRevenue,
+                EnterpriseToEbitda: entity.EnterpriseToEbitda,
+                ProfitMargins: entity.ProfitMargins,
+                GrossMargins: entity.GrossMargins,
+                OperatingMargins: entity.OperatingMargins,
+                ReturnOnAssets: entity.ReturnOnAssets,
+                ReturnOnEquity: entity.ReturnOnEquity,
+                Revenue: entity.Revenue,
+                RevenuePerShare: entity.RevenuePerShare,
+                QuarterlyRevenueGrowth: entity.QuarterlyRevenueGrowth,
+                QuarterlyEarningsGrowth: entity.QuarterlyEarningsGrowth,
+                TotalCash: entity.TotalCash,
+                TotalCashPerShare: entity.TotalCashPerShare,
+                TotalDebt: entity.TotalDebt,
+                DebtToEquity: entity.DebtToEquity,
+                CurrentRatio: entity.CurrentRatio,
+                BookValue: entity.BookValue,
+                PriceToBookValue: entity.PriceToBookValue,
+                DividendRate: entity.DividendRate,
+                DividendYield: entity.DividendYield,
+                PayoutRatio: entity.PayoutRatio,
+                Beta: entity.Beta,
+                FiftyTwoWeekLow: entity.FiftyTwoWeekLow,
+                FiftyTwoWeekHigh: entity.FiftyTwoWeekHigh,
+                LastUpdated: entity.LastUpdated
+            );
+
+            _logger.LogDebug("Retrieved cached fundamentals for {Ticker}, fetched at {FetchedAt}", ticker, entity.UpdatedAt);
             
-            return (dto, document.FetchedAt);
+            return (dto, entity.UpdatedAt);
         }
         catch (Exception ex)
         {
@@ -131,59 +210,109 @@ public sealed class StockDataRepository : IStockDataRepository
     {
         try
         {
-            var fetchedAt = DateTime.UtcNow;
-            var document = fundamentals.ToDocument(fetchedAt);
-            
-            var filter = Builders<StockFundamentalsDocument>.Filter.Eq(x => x.Ticker, fundamentals.Ticker.ToUpperInvariant());
-            var update = Builders<StockFundamentalsDocument>.Update
-                .Set(x => x.Ticker, document.Ticker)
-                .Set(x => x.CompanyName, document.CompanyName)
-                .Set(x => x.Sector, document.Sector)
-                .Set(x => x.Industry, document.Industry)
-                .Set(x => x.Description, document.Description)
-                .Set(x => x.Website, document.Website)
-                .Set(x => x.LogoUrl, document.LogoUrl)
-                .Set(x => x.MarketCap, document.MarketCap)
-                .Set(x => x.EnterpriseValue, document.EnterpriseValue)
-                .Set(x => x.TrailingPE, document.TrailingPE)
-                .Set(x => x.ForwardPE, document.ForwardPE)
-                .Set(x => x.PEG, document.PEG)
-                .Set(x => x.PriceToSales, document.PriceToSales)
-                .Set(x => x.PriceToBook, document.PriceToBook)
-                .Set(x => x.EnterpriseToRevenue, document.EnterpriseToRevenue)
-                .Set(x => x.EnterpriseToEbitda, document.EnterpriseToEbitda)
-                .Set(x => x.ProfitMargins, document.ProfitMargins)
-                .Set(x => x.GrossMargins, document.GrossMargins)
-                .Set(x => x.OperatingMargins, document.OperatingMargins)
-                .Set(x => x.ReturnOnAssets, document.ReturnOnAssets)
-                .Set(x => x.ReturnOnEquity, document.ReturnOnEquity)
-                .Set(x => x.Revenue, document.Revenue)
-                .Set(x => x.RevenuePerShare, document.RevenuePerShare)
-                .Set(x => x.QuarterlyRevenueGrowth, document.QuarterlyRevenueGrowth)
-                .Set(x => x.QuarterlyEarningsGrowth, document.QuarterlyEarningsGrowth)
-                .Set(x => x.TotalCash, document.TotalCash)
-                .Set(x => x.TotalCashPerShare, document.TotalCashPerShare)
-                .Set(x => x.TotalDebt, document.TotalDebt)
-                .Set(x => x.DebtToEquity, document.DebtToEquity)
-                .Set(x => x.CurrentRatio, document.CurrentRatio)
-                .Set(x => x.BookValue, document.BookValue)
-                .Set(x => x.PriceToBookValue, document.PriceToBookValue)
-                .Set(x => x.DividendRate, document.DividendRate)
-                .Set(x => x.DividendYield, document.DividendYield)
-                .Set(x => x.PayoutRatio, document.PayoutRatio)
-                .Set(x => x.Beta, document.Beta)
-                .Set(x => x.FiftyTwoWeekLow, document.FiftyTwoWeekLow)
-                .Set(x => x.FiftyTwoWeekHigh, document.FiftyTwoWeekHigh)
-                .Set(x => x.LastUpdated, document.LastUpdated)
-                .Set(x => x.FetchedAt, document.FetchedAt);
+            var ticker = fundamentals.Ticker.ToUpperInvariant();
+            var entity = await _context.StockFundamentals
+                .FirstOrDefaultAsync(f => f.Ticker == ticker, cancellationToken);
 
-            await _context.StockFundamentals.UpdateOneAsync(
-                filter, 
-                update, 
-                new UpdateOptions { IsUpsert = true }, 
-                cancellationToken);
+            if (entity != null)
+            {
+                // Update existing
+                entity.CompanyName = fundamentals.CompanyName;
+                entity.Sector = fundamentals.Sector;
+                entity.Industry = fundamentals.Industry;
+                entity.Description = fundamentals.Description;
+                entity.Website = fundamentals.Website;
+                entity.LogoUrl = fundamentals.LogoUrl;
+                entity.CurrencyCode = fundamentals.CurrencyCode;
+                entity.CurrencySymbol = fundamentals.CurrencySymbol;
+                entity.CurrencyName = fundamentals.CurrencyName;
+                entity.MarketCap = fundamentals.MarketCap;
+                entity.EnterpriseValue = fundamentals.EnterpriseValue;
+                entity.TrailingPE = fundamentals.TrailingPE;
+                entity.ForwardPE = fundamentals.ForwardPE;
+                entity.PEG = fundamentals.PEG;
+                entity.PriceToSales = fundamentals.PriceToSales;
+                entity.PriceToBook = fundamentals.PriceToBook;
+                entity.EnterpriseToRevenue = fundamentals.EnterpriseToRevenue;
+                entity.EnterpriseToEbitda = fundamentals.EnterpriseToEbitda;
+                entity.ProfitMargins = fundamentals.ProfitMargins;
+                entity.GrossMargins = fundamentals.GrossMargins;
+                entity.OperatingMargins = fundamentals.OperatingMargins;
+                entity.ReturnOnAssets = fundamentals.ReturnOnAssets;
+                entity.ReturnOnEquity = fundamentals.ReturnOnEquity;
+                entity.Revenue = fundamentals.Revenue;
+                entity.RevenuePerShare = fundamentals.RevenuePerShare;
+                entity.QuarterlyRevenueGrowth = fundamentals.QuarterlyRevenueGrowth;
+                entity.QuarterlyEarningsGrowth = fundamentals.QuarterlyEarningsGrowth;
+                entity.TotalCash = fundamentals.TotalCash;
+                entity.TotalCashPerShare = fundamentals.TotalCashPerShare;
+                entity.TotalDebt = fundamentals.TotalDebt;
+                entity.DebtToEquity = fundamentals.DebtToEquity;
+                entity.CurrentRatio = fundamentals.CurrentRatio;
+                entity.BookValue = fundamentals.BookValue;
+                entity.PriceToBookValue = fundamentals.PriceToBookValue;
+                entity.DividendRate = fundamentals.DividendRate;
+                entity.DividendYield = fundamentals.DividendYield;
+                entity.PayoutRatio = fundamentals.PayoutRatio;
+                entity.Beta = fundamentals.Beta;
+                entity.FiftyTwoWeekLow = fundamentals.FiftyTwoWeekLow;
+                entity.FiftyTwoWeekHigh = fundamentals.FiftyTwoWeekHigh;
+                entity.LastUpdated = fundamentals.LastUpdated;
+            }
+            else
+            {
+                // Insert new
+                entity = new StockFundamentalsEntity
+                {
+                    Ticker = ticker,
+                    CompanyName = fundamentals.CompanyName,
+                    Sector = fundamentals.Sector,
+                    Industry = fundamentals.Industry,
+                    Description = fundamentals.Description,
+                    Website = fundamentals.Website,
+                    LogoUrl = fundamentals.LogoUrl,
+                    CurrencyCode = fundamentals.CurrencyCode,
+                    CurrencySymbol = fundamentals.CurrencySymbol,
+                    CurrencyName = fundamentals.CurrencyName,
+                    MarketCap = fundamentals.MarketCap,
+                    EnterpriseValue = fundamentals.EnterpriseValue,
+                    TrailingPE = fundamentals.TrailingPE,
+                    ForwardPE = fundamentals.ForwardPE,
+                    PEG = fundamentals.PEG,
+                    PriceToSales = fundamentals.PriceToSales,
+                    PriceToBook = fundamentals.PriceToBook,
+                    EnterpriseToRevenue = fundamentals.EnterpriseToRevenue,
+                    EnterpriseToEbitda = fundamentals.EnterpriseToEbitda,
+                    ProfitMargins = fundamentals.ProfitMargins,
+                    GrossMargins = fundamentals.GrossMargins,
+                    OperatingMargins = fundamentals.OperatingMargins,
+                    ReturnOnAssets = fundamentals.ReturnOnAssets,
+                    ReturnOnEquity = fundamentals.ReturnOnEquity,
+                    Revenue = fundamentals.Revenue,
+                    RevenuePerShare = fundamentals.RevenuePerShare,
+                    QuarterlyRevenueGrowth = fundamentals.QuarterlyRevenueGrowth,
+                    QuarterlyEarningsGrowth = fundamentals.QuarterlyEarningsGrowth,
+                    TotalCash = fundamentals.TotalCash,
+                    TotalCashPerShare = fundamentals.TotalCashPerShare,
+                    TotalDebt = fundamentals.TotalDebt,
+                    DebtToEquity = fundamentals.DebtToEquity,
+                    CurrentRatio = fundamentals.CurrentRatio,
+                    BookValue = fundamentals.BookValue,
+                    PriceToBookValue = fundamentals.PriceToBookValue,
+                    DividendRate = fundamentals.DividendRate,
+                    DividendYield = fundamentals.DividendYield,
+                    PayoutRatio = fundamentals.PayoutRatio,
+                    Beta = fundamentals.Beta,
+                    FiftyTwoWeekLow = fundamentals.FiftyTwoWeekLow,
+                    FiftyTwoWeekHigh = fundamentals.FiftyTwoWeekHigh,
+                    LastUpdated = fundamentals.LastUpdated
+                };
+                _context.StockFundamentals.Add(entity);
+            }
 
-            // Update denormalized fields in SymbolDocument for efficient sorting (best-effort, don't fail if this fails)
+            await _context.SaveChangesAsync(cancellationToken);
+
+            // Update denormalized fields in SymbolEntity for efficient sorting (best-effort, don't fail if this fails)
             try
             {
                 await _symbolRepository.UpdateDenormalizedFieldsAsync(
@@ -213,14 +342,13 @@ public sealed class StockDataRepository : IStockDataRepository
     {
         try
         {
-            var filter = Builders<NoDataAvailableDocument>.Filter.And(
-                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.Ticker, ticker.ToUpperInvariant()),
-                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.ExchangeCode, exchangeCode.ToUpperInvariant())
-            );
-
-            var document = await _context.NoDataAvailable.Find(filter).FirstOrDefaultAsync(cancellationToken);
+            var entity = await _context.NoDataAvailable
+                .FirstOrDefaultAsync(n => 
+                    n.Ticker == ticker.ToUpperInvariant() && 
+                    n.ExchangeCode == exchangeCode.ToUpperInvariant(), 
+                    cancellationToken);
             
-            var isMarked = document != null;
+            var isMarked = entity != null;
             _logger.LogDebug("NoDataAvailable check for {Ticker}.{ExchangeCode}: {IsMarked}", ticker, exchangeCode, isMarked);
             
             return isMarked;
@@ -236,48 +364,41 @@ public sealed class StockDataRepository : IStockDataRepository
     {
         try
         {
-            var now = DateTime.UtcNow;
-            var expiresAt = now.AddDays(30); // TTL: retry after 30 days
+            var tickerUpper = ticker.ToUpperInvariant();
+            var exchangeCodeUpper = exchangeCode.ToUpperInvariant();
 
-            var filter = Builders<NoDataAvailableDocument>.Filter.And(
-                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.Ticker, ticker.ToUpperInvariant()),
-                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.ExchangeCode, exchangeCode.ToUpperInvariant())
-            );
+            var entity = await _context.NoDataAvailable
+                .FirstOrDefaultAsync(n => 
+                    n.Ticker == tickerUpper && 
+                    n.ExchangeCode == exchangeCodeUpper, 
+                    cancellationToken);
 
-            var existingDoc = await _context.NoDataAvailable.Find(filter).FirstOrDefaultAsync(cancellationToken);
-
-            if (existingDoc != null)
+            if (entity != null)
             {
-                // Update existing document
-                var update = Builders<NoDataAvailableDocument>.Update
-                    .Inc(x => x.FailureCount, 1)
-                    .Set(x => x.LastAttemptedAt, now)
-                    .Set(x => x.ExpiresAt, expiresAt)
-                    .Set(x => x.LastErrorMessage, errorMessage);
-
-                await _context.NoDataAvailable.UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
-                
-                _logger.LogDebug("Updated NoDataAvailable for {Ticker}.{ExchangeCode}, failure count: {FailureCount}", 
-                    ticker, exchangeCode, existingDoc.FailureCount + 1);
+                // Update existing
+                entity.FailureCount++;
+                entity.LastAttemptedAt = DateTime.UtcNow;
+                entity.LastErrorMessage = errorMessage;
             }
             else
             {
-                // Create new document
-                var document = new NoDataAvailableDocument
+                // Create new
+                entity = new NoDataAvailableEntity
                 {
-                    Ticker = ticker.ToUpperInvariant(),
-                    ExchangeCode = exchangeCode.ToUpperInvariant(),
+                    Ticker = tickerUpper,
+                    ExchangeCode = exchangeCodeUpper,
                     FailureCount = 1,
-                    FirstFailedAt = now,
-                    LastAttemptedAt = now,
-                    ExpiresAt = expiresAt,
+                    FirstFailedAt = DateTime.UtcNow,
+                    LastAttemptedAt = DateTime.UtcNow,
                     LastErrorMessage = errorMessage
                 };
-
-                await _context.NoDataAvailable.InsertOneAsync(document, cancellationToken: cancellationToken);
-                
-                _logger.LogDebug("Marked {Ticker}.{ExchangeCode} as NoDataAvailable", ticker, exchangeCode);
+                _context.NoDataAvailable.Add(entity);
             }
+
+            await _context.SaveChangesAsync(cancellationToken);
+            
+            _logger.LogDebug("Marked {Ticker}.{ExchangeCode} as NoDataAvailable, failure count: {FailureCount}", 
+                ticker, exchangeCode, entity.FailureCount);
         }
         catch (Exception ex)
         {
@@ -290,15 +411,16 @@ public sealed class StockDataRepository : IStockDataRepository
     {
         try
         {
-            var filter = Builders<NoDataAvailableDocument>.Filter.And(
-                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.Ticker, ticker.ToUpperInvariant()),
-                Builders<NoDataAvailableDocument>.Filter.Eq(x => x.ExchangeCode, exchangeCode.ToUpperInvariant())
-            );
+            var entity = await _context.NoDataAvailable
+                .FirstOrDefaultAsync(n => 
+                    n.Ticker == ticker.ToUpperInvariant() && 
+                    n.ExchangeCode == exchangeCode.ToUpperInvariant(), 
+                    cancellationToken);
 
-            var result = await _context.NoDataAvailable.DeleteOneAsync(filter, cancellationToken);
-            
-            if (result.DeletedCount > 0)
+            if (entity != null)
             {
+                entity.SoftDelete();
+                await _context.SaveChangesAsync(cancellationToken);
                 _logger.LogDebug("Removed {Ticker}.{ExchangeCode} from NoDataAvailable list", ticker, exchangeCode);
             }
         }
@@ -313,10 +435,12 @@ public sealed class StockDataRepository : IStockDataRepository
     {
         try
         {
-            var filter = Builders<NoDataAvailableDocument>.Filter.Eq(x => x.ExchangeCode, exchangeCode.ToUpperInvariant());
-            var documents = await _context.NoDataAvailable.Find(filter).ToListAsync(cancellationToken);
+            var entities = await _context.NoDataAvailable
+                .Where(n => n.ExchangeCode == exchangeCode.ToUpperInvariant())
+                .Select(n => new { n.Ticker, n.ExchangeCode })
+                .ToListAsync(cancellationToken);
 
-            var result = documents.Select(d => (d.Ticker, d.ExchangeCode)).ToList();
+            var result = entities.Select(e => (e.Ticker, e.ExchangeCode)).ToList();
             
             _logger.LogDebug("Found {Count} NoDataAvailable entries for exchange {ExchangeCode}", result.Count, exchangeCode);
             

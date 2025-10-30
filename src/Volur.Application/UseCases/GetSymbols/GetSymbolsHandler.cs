@@ -122,19 +122,19 @@ public sealed class GetSymbolsHandler
                                 Pagination: new PaginationMetadata(query.Page, query.PageSize, totalCount, hasNext),
                                 Items: pagedSymbols,
                                 FetchedAt: fetchedAt.Value,
-                                Cache: new CacheMetadata("mongo", ttlRemaining)
+                                Cache: new CacheMetadata("sql", ttlRemaining)
                             ));
                         }
                     }
 
-                    return await BuildSuccessResponseAsync(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", ttlRemaining, sortBy, sortDirection, cancellationToken);
+                    return await BuildSuccessResponseAsync(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "sql", ttlRemaining, sortBy, sortDirection, cancellationToken);
                 }
 
                 // If cache expired but we have a search query, return expired cache data instead of refreshing
                 if (!string.IsNullOrWhiteSpace(query.SearchQuery))
                 {
                     _logger.LogInformation("Symbols cache expired for {ExchangeCode}, but returning expired cache for search query", query.ExchangeCode);
-                    return await BuildSuccessResponseAsync(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "mongo", 0, sortBy, sortDirection, cancellationToken);
+                    return await BuildSuccessResponseAsync(exchange, symbols, query.Page, query.PageSize, totalCount, fetchedAt.Value, "sql", 0, sortBy, sortDirection, cancellationToken);
                 }
 
                 _logger.LogInformation("Symbols cache expired for {ExchangeCode}, fetching from provider", query.ExchangeCode);
@@ -193,7 +193,7 @@ public sealed class GetSymbolsHandler
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to cache symbols for {ExchangeCode} in MongoDB", query.ExchangeCode);
+            _logger.LogError(ex, "Failed to cache symbols for {ExchangeCode} in SQL Server", query.ExchangeCode);
             // Continue - we have the data from provider
         }
 
@@ -294,13 +294,14 @@ public sealed class GetSymbolsHandler
         // Fetch fundamental data for all symbols in parallel
         var symbolDtos = await EnrichSymbolsWithFundamentalDataAsync(symbols, cancellationToken);
 
-        // Apply client-side sorting for enriched fields if needed
-        var sortedSymbols = ApplyClientSideSorting(symbolDtos, sortBy, sortDirection);
+        // No client-side sorting needed - all sorting is done server-side at SQL Server
+        // P/E sorting uses SQL Server query with nulls always last
+        // Other fields are sorted directly in SQL Server query
 
         return Result.Success(new SymbolsResponse(
             Exchange: exchange.ToDto(),
             Pagination: new PaginationMetadata(page, pageSize, totalCount, hasNext),
-            Items: sortedSymbols,
+            Items: symbolDtos,
             FetchedAt: fetchedAt,
             Cache: new CacheMetadata(cacheSource, ttlSeconds)
         ));
